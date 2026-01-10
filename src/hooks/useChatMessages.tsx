@@ -47,8 +47,8 @@ export function useChatMessages() {
         user_id: user.id,
         role,
         content,
-        metadata: metadata || null,
-      }])
+        metadata: (metadata as Record<string, unknown> | null) ?? null,
+      } as { user_id: string; role: string; content: string; metadata: null }])
       .select()
       .single();
 
