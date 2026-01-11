@@ -6,6 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation constants
+const MAX_MESSAGE_LENGTH = 10000; // 10KB per message
+const MAX_MESSAGES = 50; // Limit conversation history
+const MAX_CONTEXT_SIZE = 5000; // Context data size
+
 const SYSTEM_PROMPT = `Você é o FinBot, um assistente financeiro pessoal inteligente e amigável. Você ajuda usuários brasileiros a gerenciar suas finanças.
 
 SUAS CAPACIDADES:
@@ -106,6 +111,57 @@ serve(async (req) => {
     }
     
     const { messages, context } = await req.json();
+    
+    // Validate messages input
+    if (!messages || !Array.isArray(messages)) {
+      return new Response(
+        JSON.stringify({ error: "Mensagens inválidas" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (messages.length > MAX_MESSAGES) {
+      return new Response(
+        JSON.stringify({ error: "Muitas mensagens no histórico" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate each message
+    for (const msg of messages) {
+      if (!msg || typeof msg !== 'object' || !msg.role || !msg.content) {
+        return new Response(
+          JSON.stringify({ error: "Formato de mensagem inválido" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (typeof msg.content !== 'string' || msg.content.length > MAX_MESSAGE_LENGTH) {
+        return new Response(
+          JSON.stringify({ error: "Mensagem muito longa" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (!['user', 'assistant', 'system'].includes(msg.role)) {
+        return new Response(
+          JSON.stringify({ error: "Role de mensagem inválido" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Validate context size if provided
+    if (context) {
+      const contextStr = JSON.stringify(context);
+      if (contextStr.length > MAX_CONTEXT_SIZE) {
+        return new Response(
+          JSON.stringify({ error: "Dados de contexto muito grandes" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+    
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
