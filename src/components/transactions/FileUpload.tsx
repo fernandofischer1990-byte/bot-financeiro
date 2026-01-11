@@ -165,12 +165,12 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
     
     if (extension === 'pdf') {
       parsePDF(file);
-    } else if (['csv', 'xls', 'xlsx'].includes(extension || '')) {
+    } else if (['csv', 'xls', 'xlsx', 'ods', 'tsv'].includes(extension || '')) {
       parseSpreadsheet(file);
     } else {
       toast({
         title: 'Formato não suportado',
-        description: 'Use PDF, CSV, XLS ou XLSX',
+        description: 'Use PDF, CSV, XLS, XLSX, ODS ou TSV',
         variant: 'destructive',
       });
     }
@@ -250,7 +250,7 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
               <input
                 ref={fileRef}
                 type="file"
-                accept=".csv,.xls,.xlsx,.pdf"
+                accept=".csv,.xls,.xlsx,.pdf,.ods,.tsv"
                 onChange={handleFileChange}
                 className="hidden"
                 id="file-upload"
@@ -265,7 +265,7 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
                     <FileText className="h-3 w-3" /> PDF (Extrato)
                   </span>
                   <span className="flex items-center gap-1">
-                    <FileSpreadsheet className="h-3 w-3" /> CSV, XLS, XLSX
+                    <FileSpreadsheet className="h-3 w-3" /> CSV, XLS, XLSX, ODS, TSV
                   </span>
                 </div>
               </label>
@@ -273,7 +273,7 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
             <p className="text-xs text-muted-foreground">
               <strong>PDF:</strong> Extratos bancários (C6, Nubank, Itaú, etc.) - extração automática com IA
               <br />
-              <strong>Planilha:</strong> Colunas: valor, tipo, categoria, data, descricao
+              <strong>Planilha:</strong> CSV, XLS, XLSX, ODS, TSV com colunas: valor, tipo, categoria, data, descricao
             </p>
           </>
         )}

@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import { FilterState } from '@/components/dashboard/DashboardFilters';
 
 export interface Transaction {
   id: string;
@@ -38,12 +39,12 @@ export function useTransactions() {
   const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState<TransactionMetrics>({
-    totalBalance: 0,
-    totalIncome: 0,
-    totalExpenses: 0,
-    byCategory: {},
-    monthlyData: [],
+  const [filters, setFilters] = useState<FilterState>({
+    period: 'all',
+    type: 'all',
+    category: 'all',
+    startDate: null,
+    endDate: null,
   });
 
   const calculateMetrics = useCallback((txs: Transaction[]): TransactionMetrics => {
@@ -109,6 +110,41 @@ export function useTransactions() {
     };
   }, [user]);
 
+  // Apply filters to transactions
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(tx => {
+      // Type filter
+      if (filters.type !== 'all' && tx.type !== filters.type) {
+        return false;
+      }
+
+      // Category filter
+      if (filters.category !== 'all' && tx.category !== filters.category) {
+        return false;
+      }
+
+      // Date filter
+      if (filters.startDate && filters.endDate) {
+        const txDate = new Date(tx.transaction_date);
+        if (txDate < filters.startDate || txDate > filters.endDate) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [transactions, filters]);
+
+  // Metrics based on filtered transactions
+  const metrics = useMemo(() => {
+    return calculateMetrics(filteredTransactions);
+  }, [filteredTransactions, calculateMetrics]);
+
+  // Overall metrics (unfiltered) for chat context
+  const overallMetrics = useMemo(() => {
+    return calculateMetrics(transactions);
+  }, [transactions, calculateMetrics]);
+
   const fetchTransactions = useCallback(async () => {
     if (!user) return;
 
@@ -134,9 +170,8 @@ export function useTransactions() {
     }));
 
     setTransactions(typedData);
-    setMetrics(calculateMetrics(typedData));
     setLoading(false);
-  }, [user, toast, calculateMetrics]);
+  }, [user, toast]);
 
   const addTransaction = async (input: TransactionInput): Promise<Transaction | null> => {
     if (!user) return null;
@@ -224,6 +259,38 @@ export function useTransactions() {
     return data?.length || 0;
   };
 
+  const updateTransaction = async (id: string, updates: Partial<Transaction>): Promise<boolean> => {
+    if (!user) return false;
+
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        type: updates.type,
+        amount: updates.amount,
+        category: updates.category,
+        description: updates.description,
+        transaction_date: updates.transaction_date,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({
+        title: 'Erro ao atualizar transação',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    toast({
+      title: '✅ Transação atualizada!',
+    });
+
+    return true;
+  };
+
   const deleteTransaction = async (id: string): Promise<boolean> => {
     if (!user) return false;
 
@@ -241,6 +308,10 @@ export function useTransactions() {
       });
       return false;
     }
+
+    toast({
+      title: '🗑️ Transação excluída!',
+    });
 
     return true;
   };
@@ -285,10 +356,15 @@ export function useTransactions() {
 
   return {
     transactions,
+    filteredTransactions,
     metrics,
+    overallMetrics,
     loading,
+    filters,
+    setFilters,
     addTransaction,
     addMultipleTransactions,
+    updateTransaction,
     deleteTransaction,
     refetch: fetchTransactions,
   };
