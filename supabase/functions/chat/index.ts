@@ -33,6 +33,19 @@ REGRAS:
 - Se não souber a data, use a data atual
 - Se a categoria não for clara, pergunte ao usuário`;
 
+// Safe error mapping - never expose internal details
+const getSafeErrorMessage = (error: unknown): string => {
+  console.error("Chat error:", error);
+  
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("api_key") || msg.includes("configured")) {
+      return "Configuração de serviço incompleta";
+    }
+  }
+  return "Erro ao processar sua mensagem";
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -43,7 +56,11 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      console.error("LOVABLE_API_KEY not configured");
+      return new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Build context with user's financial data
@@ -85,8 +102,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error("AI gateway error:", response.status);
       return new Response(JSON.stringify({ error: "Erro ao processar sua mensagem" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -97,8 +113,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("Chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
+    return new Response(JSON.stringify({ error: getSafeErrorMessage(e) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

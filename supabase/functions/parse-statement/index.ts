@@ -59,6 +59,26 @@ Formato de resposta:
   }
 }`;
 
+// Safe error mapping - never expose internal details
+const getSafeErrorMessage = (error: unknown): string => {
+  console.error("Parse statement error:", error);
+  
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("api_key") || msg.includes("configurada")) {
+      return "Configuração de serviço incompleta";
+    }
+    if (msg.includes("resposta vazia") || msg.includes("formato")) {
+      return "Não foi possível processar este extrato. Tente outro formato.";
+    }
+  }
+  return "Erro ao processar solicitação";
+};
+
+// Size limits
+const MAX_BASE64_SIZE = 5 * 1024 * 1024 * 1.33; // ~5MB file
+const MAX_TEXT_SIZE = 100000; // 100KB
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -66,6 +86,21 @@ serve(async (req) => {
 
   try {
     const { pdfBase64, pdfText } = await req.json();
+    
+    // Validate input size to prevent DoS
+    if (pdfBase64 && pdfBase64.length > MAX_BASE64_SIZE) {
+      return new Response(
+        JSON.stringify({ error: "PDF muito grande. Tamanho máximo: 5MB" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    if (pdfText && pdfText.length > MAX_TEXT_SIZE) {
+      return new Response(
+        JSON.stringify({ error: "Texto muito longo. Tamanho máximo: 100KB" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     if (!pdfBase64 && !pdfText) {
       return new Response(
@@ -76,7 +111,11 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY não está configurada");
+      console.error("LOVABLE_API_KEY not configured");
+      return new Response(
+        JSON.stringify({ error: "Configuração de serviço incompleta" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Prepare content for the AI
@@ -120,8 +159,7 @@ serve(async (req) => {
         );
       }
       
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error("AI gateway error:", response.status);
       return new Response(
         JSON.stringify({ error: "Erro ao processar extrato. Tente novamente." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -132,7 +170,11 @@ serve(async (req) => {
     const content = aiResponse.choices?.[0]?.message?.content;
     
     if (!content) {
-      throw new Error("Resposta vazia da IA");
+      console.error("Empty AI response");
+      return new Response(
+        JSON.stringify({ error: "Não foi possível processar este extrato. Tente outro formato." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Parse the JSON response
@@ -140,8 +182,11 @@ serve(async (req) => {
     try {
       parsedContent = JSON.parse(content);
     } catch (e) {
-      console.error("Failed to parse AI response:", content);
-      throw new Error("Formato de resposta inválido");
+      console.error("Failed to parse AI response");
+      return new Response(
+        JSON.stringify({ error: "Formato de resposta inválido. Tente novamente." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(
@@ -150,9 +195,8 @@ serve(async (req) => {
     );
     
   } catch (error) {
-    console.error("Parse statement error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }),
+      JSON.stringify({ error: getSafeErrorMessage(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
