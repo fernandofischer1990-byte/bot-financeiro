@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,12 +80,64 @@ const getSafeErrorMessage = (error: unknown): string => {
 const MAX_BASE64_SIZE = 5 * 1024 * 1024 * 1.33; // ~5MB file
 const MAX_TEXT_SIZE = 100000; // 100KB
 
+// Verify JWT and return user ID
+const verifyAuth = async (req: Request): Promise<{ userId: string } | { error: Response }> => {
+  const authHeader = req.headers.get("Authorization");
+  
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      error: new Response(
+        JSON.stringify({ error: "Não autorizado" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    };
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase configuration missing");
+    return {
+      error: new Response(
+        JSON.stringify({ error: "Configuração de serviço incompleta" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } }
+  });
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabase.auth.getUser(token);
+  
+  if (error || !data?.user) {
+    console.error("Auth verification failed:", error?.message);
+    return {
+      error: new Response(
+        JSON.stringify({ error: "Não autorizado" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    };
+  }
+
+  return { userId: data.user.id };
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Verify authentication
+    const authResult = await verifyAuth(req);
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+
     const { pdfBase64, pdfText } = await req.json();
     
     // Validate input size to prevent DoS
