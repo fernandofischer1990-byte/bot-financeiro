@@ -11,7 +11,18 @@ import { Loader2, LogOut, Wallet, LayoutDashboard, MessageSquare, Plus, Upload }
 
 export default function Index() {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { transactions, metrics, loading: txLoading, deleteTransaction, refetch } = useTransactions();
+  const { 
+    transactions, 
+    filteredTransactions,
+    metrics, 
+    overallMetrics,
+    loading: txLoading, 
+    filters,
+    setFilters,
+    deleteTransaction, 
+    updateTransaction,
+    refetch 
+  } = useTransactions();
 
   if (authLoading) {
     return (
@@ -68,14 +79,17 @@ export default function Index() {
           <TabsContent value="dashboard">
             <Dashboard
               metrics={metrics}
-              transactions={transactions}
+              transactions={filteredTransactions}
               loading={txLoading}
+              filters={filters}
+              onFiltersChange={setFilters}
               onDeleteTransaction={deleteTransaction}
+              onUpdateTransaction={updateTransaction}
             />
           </TabsContent>
 
           <TabsContent value="chat" className="h-[calc(100vh-200px)]">
-            <ChatInterface metrics={metrics} onTransactionAdded={refetch} />
+            <ChatInterface metrics={overallMetrics} transactions={transactions} onTransactionAdded={refetch} onDeleteTransaction={deleteTransaction} />
           </TabsContent>
 
           <TabsContent value="add">

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatMessages, ChatMessage } from '@/hooks/useChatMessages';
-import { useTransactions, TransactionMetrics } from '@/hooks/useTransactions';
+import { useTransactions, TransactionMetrics, Transaction } from '@/hooks/useTransactions';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, User, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -11,15 +11,17 @@ import { formatCurrency } from '@/lib/constants';
 
 interface ChatInterfaceProps {
   metrics: TransactionMetrics;
+  transactions: Transaction[];
   onTransactionAdded?: () => void;
+  onDeleteTransaction?: (id: string) => Promise<boolean>;
 }
 
-export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProps) {
+export function ChatInterface({ metrics, transactions, onTransactionAdded, onDeleteTransaction }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { messages, addMessage, clearHistory, setMessages } = useChatMessages();
+  const { messages, addMessage, clearHistory } = useChatMessages();
   const { addTransaction } = useTransactions();
   const { toast } = useToast();
 
@@ -30,9 +32,46 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
   }, [messages, streamingContent]);
 
   const parseAIResponse = async (content: string) => {
-    // Try to extract JSON action from response
+    // Extract action from HTML comment format: <!--ACTION:{...}-->
+    const actionMatch = content.match(/<!--ACTION:([\s\S]*?)-->/);
+    if (actionMatch) {
+      try {
+        const action = JSON.parse(actionMatch[1]);
+        
+        if (action.action === 'add_transaction') {
+          const result = await addTransaction({
+            type: action.type,
+            amount: action.amount,
+            category: action.category,
+            description: action.description || '',
+            transaction_date: action.date,
+            source: 'chat',
+          });
+          if (result) {
+            onTransactionAdded?.();
+            toast({
+              title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
+              description: `${formatCurrency(action.amount)} em ${action.category}`,
+            });
+          }
+        } else if (action.action === 'delete_transaction') {
+          if (action.id && onDeleteTransaction) {
+            const success = await onDeleteTransaction(action.id);
+            if (success) {
+              toast({
+                title: '🗑️ Transação excluída!',
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse action:', e);
+      }
+    }
+
+    // Fallback: try old JSON format
     const jsonMatch = content.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
-    if (jsonMatch) {
+    if (jsonMatch && !actionMatch) {
       try {
         const action = JSON.parse(jsonMatch[0]);
         if (action.action === 'add_transaction') {
@@ -58,6 +97,16 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
     }
   };
 
+  // Clean content for display (remove action blocks and technical content)
+  const cleanContentForDisplay = (content: string): string => {
+    return content
+      .replace(/<!--ACTION:[\s\S]*?-->/g, '')
+      .replace(/\{[\s\S]*?"action"[\s\S]*?\}/g, '')
+      .replace(/```json[\s\S]*?```/g, '')
+      .replace(/```[\s\S]*?```/g, '')
+      .trim();
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || isStreaming) return;
 
@@ -70,6 +119,16 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
     setStreamingContent('');
 
     try {
+      // Prepare recent transactions for context
+      const recentTransactions = transactions.slice(0, 10).map(t => ({
+        id: t.id,
+        type: t.type,
+        amount: t.amount,
+        category: t.category,
+        description: t.description,
+        date: t.transaction_date,
+      }));
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
         method: 'POST',
         headers: {
@@ -85,6 +144,7 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
             balance: metrics.totalBalance,
             income: metrics.totalIncome,
             expenses: metrics.totalExpenses,
+            recentTransactions,
           },
         }),
       });
@@ -124,7 +184,7 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               fullContent += content;
-              setStreamingContent(fullContent);
+              setStreamingContent(cleanContentForDisplay(fullContent));
             }
           } catch {
             buffer = line + '\n' + buffer;
@@ -184,7 +244,7 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
                 Como posso ajudar com suas finanças hoje?
               </p>
               <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                {['Quanto gastei esse mês?', 'Adicionar despesa de R$ 50'].map((suggestion) => (
+                {['Quanto gastei esse mês?', 'Adicionar despesa de R$ 50', 'Listar minhas transações'].map((suggestion) => (
                   <button
                     key={suggestion}
                     onClick={() => setInput(suggestion)}
@@ -198,7 +258,7 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
           )}
 
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+            <MessageBubble key={msg.id} message={msg} cleanContent={cleanContentForDisplay} />
           ))}
 
           {streamingContent && (
@@ -211,6 +271,7 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
                 metadata: null,
                 created_at: new Date().toISOString(),
               }} 
+              cleanContent={cleanContentForDisplay}
             />
           )}
 
@@ -242,11 +303,12 @@ export function ChatInterface({ metrics, onTransactionAdded }: ChatInterfaceProp
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message, cleanContent }: { message: ChatMessage; cleanContent: (s: string) => string }) {
   const isUser = message.role === 'user';
   
-  // Clean JSON from display
-  const displayContent = message.content.replace(/\{[\s\S]*?"action"[\s\S]*?\}/g, '').trim() || message.content;
+  const displayContent = isUser ? message.content : cleanContent(message.content);
+  
+  if (!displayContent) return null;
   
   return (
     <div className={cn('flex gap-2', isUser && 'flex-row-reverse')}>
