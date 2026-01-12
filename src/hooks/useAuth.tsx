@@ -21,26 +21,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+    let mounted = true;
 
-        if (event === 'SIGNED_IN') {
+    // Hard safety net: never keep the app blocked forever on mobile/network issues.
+    const timeoutId = window.setTimeout(() => {
+      if (!mounted) return;
+      console.warn('Timeout ao inicializar autenticação; liberando a UI.');
+      setLoading(false);
+    }, 8000);
+
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      window.clearTimeout(timeoutId);
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+
+      if (event === 'SIGNED_IN') {
+        try {
           // Track login event
           await supabase.from('analytics_events').insert({
             user_id: session?.user?.id,
             event_name: 'user_logged_in',
             properties: { method: 'email' },
           });
+        } catch (err) {
+          console.warn('Falha ao registrar analytics de login:', err);
         }
       }
-    );
+    });
 
-    // THEN check for existing session (never leave the app stuck in loading on network failures)
-    let mounted = true;
+    // THEN check for existing session (never leave the app stuck in loading on failures)
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -50,12 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error('Falha ao recuperar sessão:', err);
       } finally {
+        window.clearTimeout(timeoutId);
         if (mounted) setLoading(false);
       }
     })();
 
     return () => {
       mounted = false;
+      window.clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
