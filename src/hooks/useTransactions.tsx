@@ -146,31 +146,49 @@ export function useTransactions() {
   }, [transactions, calculateMetrics]);
 
   const fetchTransactions = useCallback(async () => {
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('transaction_date', { ascending: false });
-
-    if (error) {
-      toast({
-        title: 'Erro ao carregar transações',
-        description: error.message,
-        variant: 'destructive',
-      });
+    if (!user) {
+      setTransactions([]);
+      setLoading(false);
       return;
     }
 
-    const typedData = (data || []).map(tx => ({
-      ...tx,
-      type: tx.type as 'income' | 'expense',
-      source: tx.source as 'manual' | 'chat' | 'upload',
-    }));
+    setLoading(true);
 
-    setTransactions(typedData);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('transaction_date', { ascending: false });
+
+      if (error) {
+        toast({
+          title: 'Erro ao carregar transações',
+          description: error.message,
+          variant: 'destructive',
+        });
+        setTransactions([]);
+        return;
+      }
+
+      const typedData = (data || []).map((tx) => ({
+        ...tx,
+        type: tx.type as 'income' | 'expense',
+        source: tx.source as 'manual' | 'chat' | 'upload',
+      }));
+
+      setTransactions(typedData);
+    } catch (err) {
+      console.error('Falha ao buscar transações:', err);
+      toast({
+        title: 'Erro ao carregar transações',
+        description: 'Falha de rede ao buscar suas transações. Tente novamente.',
+        variant: 'destructive',
+      });
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
   }, [user, toast]);
 
   const addTransaction = async (input: TransactionInput): Promise<Transaction | null> => {
