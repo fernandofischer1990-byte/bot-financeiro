@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, User, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/constants';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatInterfaceProps {
   metrics: TransactionMetrics;
@@ -129,11 +130,17 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
         date: t.transaction_date,
       }));
 
+      // Get the user's session token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Você precisa estar logado para usar o chat');
+      }
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           messages: [...messages, { role: 'user', content: userMessage }].map(m => ({
