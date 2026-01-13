@@ -98,6 +98,14 @@ export function Dashboard({
         onDelete={onDeleteTransaction}
         onEdit={setEditingTransaction}
         maxItems={15}
+        hasActiveFilters={filters.period !== 'all' || filters.type !== 'all' || filters.category !== 'all'}
+        onClearFilters={() => onFiltersChange({
+          period: 'all',
+          type: 'all',
+          category: 'all',
+          startDate: null,
+          endDate: null,
+        })}
       />
 
       {/* Edit Dialog */}

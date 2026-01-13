@@ -7,20 +7,9 @@ import { useTransactions, TransactionMetrics, Transaction } from '@/hooks/useTra
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, User, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, getCategoryLabel } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
-import { z } from 'zod';
-
-// Zod schema for validating AI action responses - prevents prototype pollution and ensures type safety
-const ActionSchema = z.object({
-  action: z.enum(['add_transaction', 'delete_transaction']),
-  type: z.enum(['income', 'expense']).optional(),
-  amount: z.number().optional(),
-  category: z.string().optional(),
-  description: z.string().optional(),
-  date: z.string().optional(),
-  id: z.string().optional(),
-});
+import { extractAction } from '@/lib/actionParser';
 
 interface ChatInterfaceProps {
   metrics: TransactionMetrics;
@@ -45,83 +34,46 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
   }, [messages, streamingContent]);
 
   const parseAIResponse = async (content: string) => {
-    // Helper to safely parse and validate action JSON using Zod schema
-    const parseAndValidateAction = (jsonString: string) => {
-      try {
-        const rawParsed = JSON.parse(jsonString);
-        
-        // Reject if dangerous prototype pollution properties exist
-        if ('__proto__' in rawParsed || 'constructor' in rawParsed || 'prototype' in rawParsed) {
-          console.error('Dangerous properties detected in action object, rejecting');
-          return null;
-        }
-        
-        // Validate with Zod schema - ensures only expected properties with correct types
-        const validationResult = ActionSchema.safeParse(rawParsed);
-        if (!validationResult.success) {
-          console.error('Action validation failed:', validationResult.error.message);
-          return null;
-        }
-        
-        return validationResult.data;
-      } catch (e) {
-        console.error('Failed to parse action JSON:', e);
-        return null;
+    const result = extractAction(content);
+    
+    if (!result.success || !result.action) {
+      // No action found is normal for regular responses
+      if (result.error && result.error !== 'Nenhuma ação encontrada') {
+        console.warn('Action parsing failed:', result.error);
+        toast({
+          title: 'Não consegui registrar automaticamente',
+          description: 'Por favor, me diga o valor e a categoria novamente.',
+          variant: 'destructive',
+        });
       }
-    };
-
-    // Extract action from HTML comment format: <!--ACTION:{...}-->
-    const actionMatch = content.match(/<!--ACTION:([\s\S]*?)-->/);
-    if (actionMatch) {
-      const action = parseAndValidateAction(actionMatch[1]);
-      if (action) {
-        if (action.action === 'add_transaction' && action.type && action.amount && action.category) {
-          const result = await addTransaction({
-            type: action.type,
-            amount: action.amount,
-            category: action.category,
-            description: action.description || '',
-            transaction_date: action.date || new Date().toISOString().split('T')[0],
-            source: 'chat',
-          });
-          if (result) {
-            onTransactionAdded?.();
-            toast({
-              title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
-              description: `${formatCurrency(action.amount)} em ${action.category}`,
-            });
-          }
-        } else if (action.action === 'delete_transaction' && action.id && onDeleteTransaction) {
-          const success = await onDeleteTransaction(action.id);
-          if (success) {
-            toast({
-              title: '🗑️ Transação excluída!',
-            });
-          }
-        }
-      }
+      return;
     }
 
-    // Fallback: try old JSON format
-    const jsonMatch = content.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
-    if (jsonMatch && !actionMatch) {
-      const action = parseAndValidateAction(jsonMatch[0]);
-      if (action && action.action === 'add_transaction' && action.type && action.amount && action.category) {
-        const result = await addTransaction({
-          type: action.type,
-          amount: action.amount,
-          category: action.category,
-          description: action.description || '',
-          transaction_date: action.date || new Date().toISOString().split('T')[0],
-          source: 'chat',
+    const action = result.action;
+
+    if (action.action === 'add_transaction' && action.type && action.amount && action.category) {
+      const txResult = await addTransaction({
+        type: action.type,
+        amount: action.amount,
+        category: action.category,
+        description: action.description || '',
+        transaction_date: action.date || new Date().toISOString().split('T')[0],
+        source: 'chat',
+      });
+      
+      if (txResult) {
+        onTransactionAdded?.();
+        toast({
+          title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
+          description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}`,
         });
-        if (result) {
-          onTransactionAdded?.();
-          toast({
-            title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
-            description: `${formatCurrency(action.amount)} em ${action.category}`,
-          });
-        }
+      }
+    } else if (action.action === 'delete_transaction' && action.id && onDeleteTransaction) {
+      const success = await onDeleteTransaction(action.id);
+      if (success) {
+        toast({
+          title: '🗑️ Transação excluída!',
+        });
       }
     }
   };

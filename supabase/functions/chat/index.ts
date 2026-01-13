@@ -32,7 +32,7 @@ Para excluir transação (use o ID das transações recentes fornecidas no conte
 
 ## CATEGORIAS DISPONÍVEIS:
 **Despesas:** alimentacao, transporte, moradia, saude, lazer, educacao, vestuario, assinaturas, outros_despesa
-**Receitas:** salario, freelance, investimentos, outros_receita
+**Receitas:** salario, freelance, investimentos, vendas, outros_receita
 
 ## CAPACIDADES:
 1. Adicionar receitas e despesas
