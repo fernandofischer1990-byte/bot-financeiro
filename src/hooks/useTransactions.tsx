@@ -221,8 +221,16 @@ export function useTransactions() {
       return null;
     }
 
-    // Track event
-    await supabase.from('analytics_events').insert({
+    // Optimistic update: add to local state immediately
+    const newTransaction: Transaction = {
+      ...data,
+      type: data.type as 'income' | 'expense',
+      source: data.source as 'manual' | 'chat' | 'upload',
+    };
+    setTransactions(prev => [newTransaction, ...prev]);
+
+    // Track event (fire and forget)
+    supabase.from('analytics_events').insert({
       user_id: user.id,
       event_name: input.source === 'upload' ? 'transaction_uploaded' : 'transaction_created_manual',
       properties: {
@@ -234,7 +242,7 @@ export function useTransactions() {
       },
     });
 
-    return data as Transaction;
+    return newTransaction;
   };
 
   const addMultipleTransactions = async (inputs: TransactionInput[]): Promise<number> => {
@@ -302,6 +310,13 @@ export function useTransactions() {
       return false;
     }
 
+    // Optimistic update: update local state immediately
+    setTransactions(prev => prev.map(tx => 
+      tx.id === id 
+        ? { ...tx, ...updates, updated_at: new Date().toISOString() } 
+        : tx
+    ));
+
     toast({
       title: '✅ Transação atualizada!',
     });
@@ -312,6 +327,10 @@ export function useTransactions() {
   const deleteTransaction = async (id: string): Promise<boolean> => {
     if (!user) return false;
 
+    // Optimistic update: remove from local state immediately
+    const previousTransactions = transactions;
+    setTransactions(prev => prev.filter(tx => tx.id !== id));
+
     const { error } = await supabase
       .from('transactions')
       .delete()
@@ -319,6 +338,8 @@ export function useTransactions() {
       .eq('user_id', user.id);
 
     if (error) {
+      // Rollback on error
+      setTransactions(previousTransactions);
       toast({
         title: 'Erro ao excluir transação',
         description: error.message,

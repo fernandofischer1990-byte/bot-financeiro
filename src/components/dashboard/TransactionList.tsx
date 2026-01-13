@@ -16,6 +16,8 @@ interface TransactionListProps {
   onDelete?: (id: string) => void;
   onEdit?: (transaction: Transaction) => void;
   maxItems?: number;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
 }
 
 type SortOrder = 'newest' | 'oldest';
@@ -27,7 +29,14 @@ function getDateGroupLabel(dateStr: string): string {
   return format(date, "d 'de' MMMM", { locale: ptBR });
 }
 
-export function TransactionList({ transactions, onDelete, onEdit, maxItems = 10 }: TransactionListProps) {
+export function TransactionList({ 
+  transactions, 
+  onDelete, 
+  onEdit, 
+  maxItems = 10,
+  hasActiveFilters = false,
+  onClearFilters 
+}: TransactionListProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
 
   const sortedTransactions = [...transactions].sort((a, b) => {
@@ -74,7 +83,20 @@ export function TransactionList({ transactions, onDelete, onEdit, maxItems = 10 
       <CardContent className="p-0">
         {displayTransactions.length === 0 ? (
           <div className="p-6 text-center">
-            <p className="text-muted-foreground text-sm">Nenhuma transação encontrada</p>
+            {hasActiveFilters ? (
+              <div className="space-y-3">
+                <p className="text-muted-foreground text-sm">
+                  Nenhuma transação encontrada com os filtros atuais
+                </p>
+                {onClearFilters && (
+                  <Button variant="outline" size="sm" onClick={onClearFilters}>
+                    Limpar filtros
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">Nenhuma transação encontrada</p>
+            )}
           </div>
         ) : (
           <ScrollArea className="h-[400px]">

@@ -16,6 +16,7 @@ export const INCOME_CATEGORIES = [
   { value: 'salario', label: 'Salário', icon: '💰' },
   { value: 'freelance', label: 'Freelance', icon: '💻' },
   { value: 'investimentos', label: 'Investimentos', icon: '📈' },
+  { value: 'vendas', label: 'Vendas', icon: '🛍️' },
   { value: 'outros_receita', label: 'Outros', icon: '💵' },
 ] as const;
 
@@ -34,6 +35,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   salario: 'hsl(var(--success))',
   freelance: 'hsl(var(--accent))',
   investimentos: 'hsl(var(--chart-2))',
+  vendas: 'hsl(var(--chart-4))',
   outros_receita: 'hsl(var(--chart-6))',
 };
 
