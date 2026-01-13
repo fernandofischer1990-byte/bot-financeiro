@@ -9,6 +9,18 @@ import { Send, Loader2, Bot, User, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
+import { z } from 'zod';
+
+// Zod schema for validating AI action responses - prevents prototype pollution and ensures type safety
+const ActionSchema = z.object({
+  action: z.enum(['add_transaction', 'delete_transaction']),
+  type: z.enum(['income', 'expense']).optional(),
+  amount: z.number().optional(),
+  category: z.string().optional(),
+  description: z.string().optional(),
+  date: z.string().optional(),
+  id: z.string().optional(),
+});
 
 interface ChatInterfaceProps {
   metrics: TransactionMetrics;
@@ -33,19 +45,43 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
   }, [messages, streamingContent]);
 
   const parseAIResponse = async (content: string) => {
+    // Helper to safely parse and validate action JSON using Zod schema
+    const parseAndValidateAction = (jsonString: string) => {
+      try {
+        const rawParsed = JSON.parse(jsonString);
+        
+        // Reject if dangerous prototype pollution properties exist
+        if ('__proto__' in rawParsed || 'constructor' in rawParsed || 'prototype' in rawParsed) {
+          console.error('Dangerous properties detected in action object, rejecting');
+          return null;
+        }
+        
+        // Validate with Zod schema - ensures only expected properties with correct types
+        const validationResult = ActionSchema.safeParse(rawParsed);
+        if (!validationResult.success) {
+          console.error('Action validation failed:', validationResult.error.message);
+          return null;
+        }
+        
+        return validationResult.data;
+      } catch (e) {
+        console.error('Failed to parse action JSON:', e);
+        return null;
+      }
+    };
+
     // Extract action from HTML comment format: <!--ACTION:{...}-->
     const actionMatch = content.match(/<!--ACTION:([\s\S]*?)-->/);
     if (actionMatch) {
-      try {
-        const action = JSON.parse(actionMatch[1]);
-        
-        if (action.action === 'add_transaction') {
+      const action = parseAndValidateAction(actionMatch[1]);
+      if (action) {
+        if (action.action === 'add_transaction' && action.type && action.amount && action.category) {
           const result = await addTransaction({
             type: action.type,
             amount: action.amount,
             category: action.category,
             description: action.description || '',
-            transaction_date: action.date,
+            transaction_date: action.date || new Date().toISOString().split('T')[0],
             source: 'chat',
           });
           if (result) {
@@ -55,45 +91,37 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
               description: `${formatCurrency(action.amount)} em ${action.category}`,
             });
           }
-        } else if (action.action === 'delete_transaction') {
-          if (action.id && onDeleteTransaction) {
-            const success = await onDeleteTransaction(action.id);
-            if (success) {
-              toast({
-                title: '🗑️ Transação excluída!',
-              });
-            }
+        } else if (action.action === 'delete_transaction' && action.id && onDeleteTransaction) {
+          const success = await onDeleteTransaction(action.id);
+          if (success) {
+            toast({
+              title: '🗑️ Transação excluída!',
+            });
           }
         }
-      } catch (e) {
-        console.error('Failed to parse action:', e);
       }
     }
 
     // Fallback: try old JSON format
     const jsonMatch = content.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
     if (jsonMatch && !actionMatch) {
-      try {
-        const action = JSON.parse(jsonMatch[0]);
-        if (action.action === 'add_transaction') {
-          const result = await addTransaction({
-            type: action.type,
-            amount: action.amount,
-            category: action.category,
-            description: action.description || '',
-            transaction_date: action.date,
-            source: 'chat',
+      const action = parseAndValidateAction(jsonMatch[0]);
+      if (action && action.action === 'add_transaction' && action.type && action.amount && action.category) {
+        const result = await addTransaction({
+          type: action.type,
+          amount: action.amount,
+          category: action.category,
+          description: action.description || '',
+          transaction_date: action.date || new Date().toISOString().split('T')[0],
+          source: 'chat',
+        });
+        if (result) {
+          onTransactionAdded?.();
+          toast({
+            title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
+            description: `${formatCurrency(action.amount)} em ${action.category}`,
           });
-          if (result) {
-            onTransactionAdded?.();
-            toast({
-              title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
-              description: `${formatCurrency(action.amount)} em ${action.category}`,
-            });
-          }
         }
-      } catch (e) {
-        console.error('Failed to parse action:', e);
       }
     }
   };
