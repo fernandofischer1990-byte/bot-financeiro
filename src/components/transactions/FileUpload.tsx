@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useTransactions, TransactionInput } from '@/hooks/useTransactions';
+import { useTransactionsContext, TransactionInput } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileSpreadsheet, Loader2, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import { read, utils } from 'xlsx';
@@ -9,26 +9,19 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { TransactionPreview, ExtractedTransaction } from './TransactionPreview';
 import { suggestCategory } from '@/lib/categoryMapping';
 import { supabase } from '@/integrations/supabase/client';
-
-interface ParsedRow {
-  type: 'income' | 'expense';
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-  error?: string;
-}
+import { normalizeTransactionRow, NormalizedTransactionRow, normalizeCategory } from '@/lib/transactionNormalization';
+import { normalizeToLocalDate } from '@/lib/dateUtils';
 
 type UploadStep = 'idle' | 'loading' | 'preview' | 'importing';
 
-export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
-  const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
+export function FileUpload() {
+  const [parsedData, setParsedData] = useState<NormalizedTransactionRow[]>([]);
   const [extractedTransactions, setExtractedTransactions] = useState<ExtractedTransaction[]>([]);
   const [summary, setSummary] = useState<{ totalTransactions: number; totalIncome: number; totalExpenses: number } | undefined>();
   const [step, setStep] = useState<UploadStep>('idle');
   const [uploadType, setUploadType] = useState<'spreadsheet' | 'pdf' | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { addMultipleTransactions } = useTransactions();
+  const { addMultipleTransactions } = useTransactionsContext();
   const { toast } = useToast();
 
   const resetState = () => {
@@ -51,32 +44,10 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const data = utils.sheet_to_json<Record<string, unknown>>(sheet);
 
-      const rows: ParsedRow[] = data.map((row, index) => {
-        try {
-          const amount = parseFloat(String(row['valor'] || row['amount'] || row['Valor'] || 0).replace(',', '.'));
-          const type = (String(row['tipo'] || row['type'] || row['Tipo'] || '').toLowerCase().includes('receita') || amount > 0) 
-            ? 'income' : 'expense';
-          const category = String(row['categoria'] || row['category'] || row['Categoria'] || 'outros_despesa');
-          const description = String(row['descricao'] || row['description'] || row['Descrição'] || '');
-          const dateRaw = row['data'] || row['date'] || row['Data'];
-          
-          let date = new Date().toISOString().split('T')[0];
-          if (dateRaw) {
-            const d = new Date(dateRaw as string);
-            if (!isNaN(d.getTime())) {
-              date = d.toISOString().split('T')[0];
-            }
-          }
-
-          if (isNaN(amount) || amount === 0) {
-            return { type, amount: 0, category, description, date, error: `Linha ${index + 2}: Valor inválido` };
-          }
-
-          return { type, amount: Math.abs(amount), category, description, date };
-        } catch {
-          return { type: 'expense', amount: 0, category: '', description: '', date: '', error: `Linha ${index + 2}: Erro ao processar` };
-        }
-      });
+      // Use centralized normalization
+      const rows: NormalizedTransactionRow[] = data.map((row, index) => 
+        normalizeTransactionRow(row, index)
+      );
 
       setParsedData(rows);
       setStep('preview');
@@ -96,13 +67,11 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
     setUploadType('pdf');
 
     try {
-      // Convert file to base64
       const buffer = await file.arrayBuffer();
       const base64 = btoa(
         new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
       );
 
-      // Call the edge function
       const { data, error } = await supabase.functions.invoke('parse-statement', {
         body: { pdfBase64: base64 }
       });
@@ -115,16 +84,20 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
         throw new Error('Nenhuma transação encontrada no extrato');
       }
 
-      // Convert to ExtractedTransaction format
+      // Convert to ExtractedTransaction format with normalized categories
       const transactions: ExtractedTransaction[] = data.transactions.map((t: any, index: number) => {
         const type = t.type === 'income' ? 'income' : 'expense';
+        const description = t.description || '';
+        // Normalize category using centralized logic
+        const category = normalizeCategory(t.suggestedCategory, type, description);
+        
         return {
           id: `tx-${index}-${Date.now()}`,
-          date: t.date || new Date().toISOString().split('T')[0],
+          date: normalizeToLocalDate(t.date),
           type,
           amount: Math.abs(Number(t.amount) || 0),
-          description: t.description || '',
-          suggestedCategory: t.suggestedCategory || suggestCategory(t.description || '', type),
+          description,
+          suggestedCategory: category,
           selected: true
         };
       }).filter((t: ExtractedTransaction) => t.amount > 0);
@@ -198,7 +171,6 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
     if (count > 0) {
       toast({ title: `✅ ${count} transações importadas!` });
       resetState();
-      onSuccess?.();
     } else {
       setStep('preview');
     }
@@ -226,7 +198,6 @@ export function FileUpload({ onSuccess }: { onSuccess?: () => void }) {
     if (count > 0) {
       toast({ title: `✅ ${count} transações importadas!` });
       resetState();
-      onSuccess?.();
     } else {
       setStep('preview');
     }

@@ -4,24 +4,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useTransactions, TransactionInput } from '@/hooks/useTransactions';
+import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, formatCurrency } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus } from 'lucide-react';
+import { getLocalISODate } from '@/lib/dateUtils';
 
-interface TransactionFormProps {
-  onSuccess?: () => void;
-}
-
-export function TransactionForm({ onSuccess }: TransactionFormProps) {
+export function TransactionForm() {
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalISODate());
   const [loading, setLoading] = useState(false);
   
-  const { addTransaction } = useTransactions();
+  const { addTransaction } = useTransactionsContext();
   const { toast } = useToast();
   
   const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
@@ -36,16 +33,14 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
     }
 
     setLoading(true);
-    const input: TransactionInput = {
+    const result = await addTransaction({
       type,
       amount: numAmount,
       category,
       description: description || undefined,
       transaction_date: date,
       source: 'manual',
-    };
-
-    const result = await addTransaction(input);
+    });
     setLoading(false);
 
     if (result) {
@@ -56,7 +51,6 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
       setAmount('');
       setCategory('');
       setDescription('');
-      onSuccess?.();
     }
   };
 
