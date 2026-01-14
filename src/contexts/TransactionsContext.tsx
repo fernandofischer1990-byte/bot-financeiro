@@ -1,0 +1,425 @@
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { FilterState } from '@/components/dashboard/DashboardFilters';
+import { getLocalISODate, parseDateOnly } from '@/lib/dateUtils';
+
+export interface Transaction {
+  id: string;
+  user_id: string;
+  type: 'income' | 'expense';
+  amount: number;
+  category: string;
+  description: string | null;
+  transaction_date: string;
+  source: 'manual' | 'chat' | 'upload';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TransactionInput {
+  type: 'income' | 'expense';
+  amount: number;
+  category: string;
+  description?: string;
+  transaction_date?: string;
+  source?: 'manual' | 'chat' | 'upload';
+}
+
+export interface TransactionMetrics {
+  totalBalance: number;
+  totalIncome: number;
+  totalExpenses: number;
+  byCategory: Record<string, number>;
+  monthlyData: { month: string; income: number; expenses: number }[];
+}
+
+interface TransactionsContextValue {
+  transactions: Transaction[];
+  filteredTransactions: Transaction[];
+  metrics: TransactionMetrics;
+  overallMetrics: TransactionMetrics;
+  initialLoading: boolean;
+  refreshing: boolean;
+  filters: FilterState;
+  setFilters: (filters: FilterState) => void;
+  addTransaction: (input: TransactionInput) => Promise<Transaction | null>;
+  addMultipleTransactions: (inputs: TransactionInput[]) => Promise<number>;
+  updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<boolean>;
+  deleteTransaction: (id: string) => Promise<boolean>;
+  refetch: () => Promise<void>;
+}
+
+const TransactionsContext = createContext<TransactionsContextValue | null>(null);
+
+export function TransactionsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnce = useRef(false);
+  const [filters, setFilters] = useState<FilterState>({
+    period: 'all',
+    type: 'all',
+    category: 'all',
+    startDate: null,
+    endDate: null,
+  });
+
+  const calculateMetrics = useCallback((txs: Transaction[]): TransactionMetrics => {
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    const byCategory: Record<string, number> = {};
+    const monthlyMap: Record<string, { income: number; expenses: number }> = {};
+
+    for (const tx of txs) {
+      const amount = Number(tx.amount);
+      
+      if (tx.type === 'income') {
+        totalIncome += amount;
+      } else {
+        totalExpenses += amount;
+      }
+
+      byCategory[tx.category] = (byCategory[tx.category] || 0) + amount;
+
+      const monthKey = tx.transaction_date.substring(0, 7);
+      if (!monthlyMap[monthKey]) {
+        monthlyMap[monthKey] = { income: 0, expenses: 0 };
+      }
+      if (tx.type === 'income') {
+        monthlyMap[monthKey].income += amount;
+      } else {
+        monthlyMap[monthKey].expenses += amount;
+      }
+    }
+
+    const monthlyData = Object.entries(monthlyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([month, data]) => ({
+        month: new Date(month + '-01').toLocaleDateString('pt-BR', { month: 'short' }),
+        ...data,
+      }));
+
+    return {
+      totalBalance: totalIncome - totalExpenses,
+      totalIncome,
+      totalExpenses,
+      byCategory,
+      monthlyData,
+    };
+  }, []);
+
+  // Apply filters using local date parsing
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(tx => {
+      if (filters.type !== 'all' && tx.type !== filters.type) {
+        return false;
+      }
+
+      if (filters.category !== 'all' && tx.category !== filters.category) {
+        return false;
+      }
+
+      if (filters.startDate && filters.endDate) {
+        const txDate = parseDateOnly(tx.transaction_date);
+        const startDate = new Date(filters.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        
+        if (txDate < startDate || txDate > endDate) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [transactions, filters]);
+
+  const metrics = useMemo(() => calculateMetrics(filteredTransactions), [filteredTransactions, calculateMetrics]);
+  const overallMetrics = useMemo(() => calculateMetrics(transactions), [transactions, calculateMetrics]);
+
+  const fetchTransactions = useCallback(async (silent = false) => {
+    if (!user) {
+      setTransactions([]);
+      setInitialLoading(false);
+      return;
+    }
+
+    // Only show skeleton on initial load, not on refreshes
+    if (!hasLoadedOnce.current) {
+      setInitialLoading(true);
+    } else if (!silent) {
+      setRefreshing(true);
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('transaction_date', { ascending: false });
+
+      if (error) {
+        if (!silent) {
+          toast({
+            title: 'Erro ao carregar transações',
+            description: error.message,
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+
+      const typedData = (data || []).map((tx) => ({
+        ...tx,
+        type: tx.type as 'income' | 'expense',
+        source: tx.source as 'manual' | 'chat' | 'upload',
+      }));
+
+      setTransactions(typedData);
+      hasLoadedOnce.current = true;
+    } catch (err) {
+      console.error('Falha ao buscar transações:', err);
+      if (!silent) {
+        toast({
+          title: 'Erro ao carregar transações',
+          description: 'Falha de rede. Tente novamente.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setInitialLoading(false);
+      setRefreshing(false);
+    }
+  }, [user, toast]);
+
+  const addTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
+    if (!user) return null;
+
+    const transactionDate = input.transaction_date || getLocalISODate();
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: user.id,
+        type: input.type,
+        amount: input.amount,
+        category: input.category,
+        description: input.description || null,
+        transaction_date: transactionDate,
+        source: input.source || 'manual',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: 'Erro ao adicionar transação',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return null;
+    }
+
+    const newTransaction: Transaction = {
+      ...data,
+      type: data.type as 'income' | 'expense',
+      source: data.source as 'manual' | 'chat' | 'upload',
+    };
+
+    // Optimistic update: add to state immediately
+    setTransactions(prev => {
+      // Sort by date descending after adding
+      const updated = [newTransaction, ...prev];
+      return updated.sort((a, b) => 
+        b.transaction_date.localeCompare(a.transaction_date) || 
+        b.created_at.localeCompare(a.created_at)
+      );
+    });
+
+    return newTransaction;
+  }, [user, toast]);
+
+  const addMultipleTransactions = useCallback(async (inputs: TransactionInput[]): Promise<number> => {
+    if (!user || inputs.length === 0) return 0;
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert(
+        inputs.map(input => ({
+          user_id: user.id,
+          type: input.type,
+          amount: input.amount,
+          category: input.category,
+          description: input.description || null,
+          transaction_date: input.transaction_date || getLocalISODate(),
+          source: input.source || 'upload',
+        }))
+      )
+      .select();
+
+    if (error) {
+      toast({
+        title: 'Erro ao importar transações',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return 0;
+    }
+
+    // Optimistic update: add all new transactions
+    if (data && data.length > 0) {
+      const newTransactions: Transaction[] = data.map(tx => ({
+        ...tx,
+        type: tx.type as 'income' | 'expense',
+        source: tx.source as 'manual' | 'chat' | 'upload',
+      }));
+
+      setTransactions(prev => {
+        const updated = [...newTransactions, ...prev];
+        return updated.sort((a, b) => 
+          b.transaction_date.localeCompare(a.transaction_date) || 
+          b.created_at.localeCompare(a.created_at)
+        );
+      });
+    }
+
+    return data?.length || 0;
+  }, [user, toast]);
+
+  const updateTransaction = useCallback(async (id: string, updates: Partial<Transaction>): Promise<boolean> => {
+    if (!user) return false;
+
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        type: updates.type,
+        amount: updates.amount,
+        category: updates.category,
+        description: updates.description,
+        transaction_date: updates.transaction_date,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({
+        title: 'Erro ao atualizar transação',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    // Optimistic update
+    setTransactions(prev => prev.map(tx => 
+      tx.id === id 
+        ? { ...tx, ...updates, updated_at: new Date().toISOString() } 
+        : tx
+    ));
+
+    toast({ title: '✅ Transação atualizada!' });
+    return true;
+  }, [user, toast]);
+
+  const deleteTransaction = useCallback(async (id: string): Promise<boolean> => {
+    if (!user) return false;
+
+    // Optimistic update: remove immediately
+    const previousTransactions = transactions;
+    setTransactions(prev => prev.filter(tx => tx.id !== id));
+
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      // Rollback on error
+      setTransactions(previousTransactions);
+      toast({
+        title: 'Erro ao excluir transação',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    toast({ title: '🗑️ Transação excluída!' });
+    return true;
+  }, [user, toast, transactions]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  // Realtime subscription with debounced silent refresh
+  useEffect(() => {
+    if (!user) return;
+
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    const channel = supabase
+      .channel('transactions-realtime-provider')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Debounce realtime events to avoid rapid refetches
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchTransactions(true); // Silent refresh
+          }, 500);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchTransactions]);
+
+  const value: TransactionsContextValue = {
+    transactions,
+    filteredTransactions,
+    metrics,
+    overallMetrics,
+    initialLoading,
+    refreshing,
+    filters,
+    setFilters,
+    addTransaction,
+    addMultipleTransactions,
+    updateTransaction,
+    deleteTransaction,
+    refetch: () => fetchTransactions(false),
+  };
+
+  return (
+    <TransactionsContext.Provider value={value}>
+      {children}
+    </TransactionsContext.Provider>
+  );
+}
+
+export function useTransactionsContext() {
+  const context = useContext(TransactionsContext);
+  if (!context) {
+    throw new Error('useTransactionsContext must be used within TransactionsProvider');
+  }
+  return context;
+}

@@ -1,5 +1,5 @@
 import { useAuth } from '@/hooks/useAuth';
-import { useTransactions } from '@/hooks/useTransactions';
+import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ChatInterface } from '@/components/chat/ChatInterface';
@@ -16,13 +16,12 @@ export default function Index() {
     filteredTransactions,
     metrics, 
     overallMetrics,
-    loading: txLoading, 
+    initialLoading,
     filters,
     setFilters,
     deleteTransaction, 
     updateTransaction,
-    refetch 
-  } = useTransactions();
+  } = useTransactionsContext();
 
   if (authLoading) {
     return (
@@ -80,7 +79,7 @@ export default function Index() {
             <Dashboard
               metrics={metrics}
               transactions={filteredTransactions}
-              loading={txLoading}
+              loading={initialLoading}
               filters={filters}
               onFiltersChange={setFilters}
               onDeleteTransaction={deleteTransaction}
@@ -89,18 +88,22 @@ export default function Index() {
           </TabsContent>
 
           <TabsContent value="chat" className="h-[calc(100vh-200px)]">
-            <ChatInterface metrics={overallMetrics} transactions={transactions} onTransactionAdded={refetch} onDeleteTransaction={deleteTransaction} />
+            <ChatInterface 
+              metrics={overallMetrics} 
+              transactions={transactions} 
+              onDeleteTransaction={deleteTransaction} 
+            />
           </TabsContent>
 
           <TabsContent value="add">
             <div className="max-w-md mx-auto">
-              <TransactionForm onSuccess={refetch} />
+              <TransactionForm />
             </div>
           </TabsContent>
 
           <TabsContent value="import">
             <div className="max-w-md mx-auto">
-              <FileUpload onSuccess={refetch} />
+              <FileUpload />
             </div>
           </TabsContent>
         </Tabs>

@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { ALL_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './constants';
 import { suggestCategory } from './categoryMapping';
+import { getLocalISODate } from './dateUtils';
 
 // Valid category values for validation
 const VALID_EXPENSE_CATEGORIES = EXPENSE_CATEGORIES.map(c => c.value) as string[];
@@ -72,7 +73,7 @@ function normalizeAmount(value: unknown): number | null {
  * Handles: "2025-01-11", "11/01/2025", "11-01-2025", etc.
  */
 function normalizeDate(value: unknown): string {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalISODate();
   
   if (!value || typeof value !== 'string') {
     return today;

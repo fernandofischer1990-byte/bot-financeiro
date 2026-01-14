@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatMessages, ChatMessage } from '@/hooks/useChatMessages';
-import { useTransactions, TransactionMetrics, Transaction } from '@/hooks/useTransactions';
+import { useTransactionsContext, TransactionMetrics, Transaction } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, User, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,17 +14,16 @@ import { extractAction } from '@/lib/actionParser';
 interface ChatInterfaceProps {
   metrics: TransactionMetrics;
   transactions: Transaction[];
-  onTransactionAdded?: () => void;
   onDeleteTransaction?: (id: string) => Promise<boolean>;
 }
 
-export function ChatInterface({ metrics, transactions, onTransactionAdded, onDeleteTransaction }: ChatInterfaceProps) {
+export function ChatInterface({ metrics, transactions, onDeleteTransaction }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { messages, addMessage, clearHistory } = useChatMessages();
-  const { addTransaction } = useTransactions();
+  const { addTransaction } = useTransactionsContext();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -37,7 +36,6 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
     const result = extractAction(content);
     
     if (!result.success || !result.action) {
-      // No action found is normal for regular responses
       if (result.error && result.error !== 'Nenhuma ação encontrada') {
         console.warn('Action parsing failed:', result.error);
         toast({
@@ -57,12 +55,11 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
         amount: action.amount,
         category: action.category,
         description: action.description || '',
-        transaction_date: action.date || new Date().toISOString().split('T')[0],
+        transaction_date: action.date,
         source: 'chat',
       });
       
       if (txResult) {
-        onTransactionAdded?.();
         toast({
           title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
           description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}`,
@@ -78,7 +75,6 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
     }
   };
 
-  // Clean content for display (remove action blocks and technical content)
   const cleanContentForDisplay = (content: string): string => {
     return content
       .replace(/<!--ACTION:[\s\S]*?-->/g, '')
@@ -94,13 +90,11 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
     const userMessage = input.trim();
     setInput('');
     
-    // Add user message to DB and UI
     await addMessage('user', userMessage);
     setIsStreaming(true);
     setStreamingContent('');
 
     try {
-      // Prepare recent transactions for context
       const recentTransactions = transactions.slice(0, 10).map(t => ({
         id: t.id,
         type: t.type,
@@ -110,7 +104,6 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
         date: t.transaction_date,
       }));
 
-      // Get the user's session token for authentication
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         throw new Error('Você precisa estar logado para usar o chat');
@@ -180,7 +173,6 @@ export function ChatInterface({ metrics, transactions, onTransactionAdded, onDel
         }
       }
 
-      // Save assistant message and parse for actions
       await addMessage('assistant', fullContent);
       await parseAIResponse(fullContent);
       setStreamingContent('');
