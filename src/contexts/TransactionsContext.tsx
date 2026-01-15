@@ -48,6 +48,7 @@ interface TransactionsContextValue {
   addMultipleTransactions: (inputs: TransactionInput[]) => Promise<number>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<boolean>;
   deleteTransaction: (id: string) => Promise<boolean>;
+  deleteAllTransactions: (filter?: 'all' | 'income' | 'expense') => Promise<number>;
   refetch: () => Promise<void>;
 }
 
@@ -356,6 +357,71 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     return true;
   }, [user, toast, transactions]);
 
+  const deleteAllTransactions = useCallback(async (filter: 'all' | 'income' | 'expense' = 'all'): Promise<number> => {
+    if (!user) return 0;
+
+    // Count how many will be deleted for feedback
+    const toDelete = filter === 'all' 
+      ? transactions 
+      : transactions.filter(tx => tx.type === filter);
+    
+    const count = toDelete.length;
+    
+    if (count === 0) {
+      toast({ title: 'Nenhuma transação para excluir' });
+      return 0;
+    }
+
+    // Optimistic update: remove immediately
+    const previousTransactions = transactions;
+    setTransactions(prev => 
+      filter === 'all' 
+        ? [] 
+        : prev.filter(tx => tx.type !== filter)
+    );
+
+    try {
+      let query = supabase
+        .from('transactions')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (filter !== 'all') {
+        query = query.eq('type', filter);
+      }
+
+      const { error } = await query;
+
+      if (error) {
+        // Rollback on error
+        setTransactions(previousTransactions);
+        toast({
+          title: 'Erro ao excluir transações',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return 0;
+      }
+
+      const label = filter === 'all' 
+        ? 'Todas as transações excluídas' 
+        : filter === 'income' 
+          ? 'Todas as receitas excluídas' 
+          : 'Todas as despesas excluídas';
+      
+      toast({ title: `🗑️ ${label}! (${count})` });
+      return count;
+    } catch (err) {
+      setTransactions(previousTransactions);
+      toast({
+        title: 'Erro ao excluir transações',
+        description: 'Falha de rede. Tente novamente.',
+        variant: 'destructive',
+      });
+      return 0;
+    }
+  }, [user, toast, transactions]);
+
   // Initial fetch
   useEffect(() => {
     fetchTransactions();
@@ -406,6 +472,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     addMultipleTransactions,
     updateTransaction,
     deleteTransaction,
+    deleteAllTransactions,
     refetch: () => fetchTransactions(false),
   };
 
