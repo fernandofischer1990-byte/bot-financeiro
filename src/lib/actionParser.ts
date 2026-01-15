@@ -11,23 +11,25 @@ const ALL_VALID_CATEGORIES = ALL_CATEGORIES.map(c => c.value) as string[];
 
 // Flexible schema that accepts both number and string for amount
 const RawActionSchema = z.object({
-  action: z.enum(['add_transaction', 'delete_transaction']),
+  action: z.enum(['add_transaction', 'delete_transaction', 'delete_all_transactions']),
   type: z.enum(['income', 'expense']).optional(),
   amount: z.union([z.number(), z.string()]).optional(),
   category: z.string().optional(),
   description: z.string().optional(),
   date: z.string().optional(),
   id: z.string().optional(),
+  filter: z.enum(['all', 'income', 'expense']).optional(),
 });
 
 export interface ParsedAction {
-  action: 'add_transaction' | 'delete_transaction';
+  action: 'add_transaction' | 'delete_transaction' | 'delete_all_transactions';
   type?: 'income' | 'expense';
   amount?: number;
   category?: string;
   description?: string;
   date?: string;
   id?: string;
+  filter?: 'all' | 'income' | 'expense';
 }
 
 export interface ParseResult {
@@ -175,6 +177,17 @@ export function parseAction(jsonString: string): ParseResult {
         action: {
           action: 'delete_transaction',
           id: raw.id,
+        },
+      };
+    }
+    
+    // For delete_all_transactions, validate filter
+    if (raw.action === 'delete_all_transactions') {
+      return {
+        success: true,
+        action: {
+          action: 'delete_all_transactions',
+          filter: raw.filter || 'all',
         },
       };
     }

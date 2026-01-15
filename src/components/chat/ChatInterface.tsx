@@ -10,6 +10,16 @@ import { cn } from '@/lib/utils';
 import { formatCurrency, getCategoryLabel } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { extractAction } from '@/lib/actionParser';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface ChatInterfaceProps {
   metrics: TransactionMetrics;
@@ -21,9 +31,10 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { messages, addMessage, clearHistory } = useChatMessages();
-  const { addTransaction } = useTransactionsContext();
+  const { addTransaction, deleteAllTransactions } = useTransactionsContext();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -72,6 +83,26 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
           title: '🗑️ Transação excluída!',
         });
       }
+    } else if (action.action === 'delete_all_transactions') {
+      // Show confirmation dialog before mass deletion
+      setPendingDeleteAll({ filter: action.filter || 'all' });
+    }
+  };
+
+  const handleConfirmDeleteAll = async () => {
+    if (!pendingDeleteAll) return;
+    
+    const count = await deleteAllTransactions(pendingDeleteAll.filter);
+    setPendingDeleteAll(null);
+    
+    if (count > 0) {
+      const label = pendingDeleteAll.filter === 'all' 
+        ? `todas as ${count} transações` 
+        : pendingDeleteAll.filter === 'income' 
+          ? `todas as ${count} receitas` 
+          : `todas as ${count} despesas`;
+      
+      await addMessage('assistant', `Pronto! Excluí ${label} conforme solicitado. ✅`);
     }
   };
 
@@ -278,6 +309,27 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
           </Button>
         </form>
       </div>
+
+      {/* Confirmation Dialog for Mass Deletion */}
+      <AlertDialog open={!!pendingDeleteAll} onOpenChange={(open) => !open && setPendingDeleteAll(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteAll?.filter === 'all' && 'Isso irá excluir TODAS as suas transações.'}
+              {pendingDeleteAll?.filter === 'income' && 'Isso irá excluir TODAS as suas receitas.'}
+              {pendingDeleteAll?.filter === 'expense' && 'Isso irá excluir TODAS as suas despesas.'}
+              {' '}Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeleteAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
