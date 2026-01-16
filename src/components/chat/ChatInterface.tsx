@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -32,14 +32,28 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { messages, addMessage, clearHistory } = useChatMessages();
   const { addTransaction, deleteAllTransactions } = useTransactionsContext();
   const { toast } = useToast();
 
+  // Memoize recent transactions to prevent re-renders
+  const recentTransactions = useMemo(() => 
+    transactions.slice(0, 10).map(t => ({
+      id: t.id,
+      type: t.type,
+      amount: t.amount,
+      category: t.category,
+      description: t.description,
+      date: t.transaction_date,
+    })), [transactions]);
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollAreaRef.current) {
+      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [messages, streamingContent]);
 
@@ -126,15 +140,6 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
     setStreamingContent('');
 
     try {
-      const recentTransactions = transactions.slice(0, 10).map(t => ({
-        id: t.id,
-        type: t.type,
-        amount: t.amount,
-        category: t.category,
-        description: t.description,
-        date: t.transaction_date,
-      }));
-
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         throw new Error('Você precisa estar logado para usar o chat');
@@ -244,7 +249,7 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
       </div>
 
       {/* Messages */}
-      <ScrollArea ref={scrollRef} className="flex-1 p-4 chat-scrollbar">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 chat-scrollbar">
         <div className="space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="text-center py-8">

@@ -1,5 +1,5 @@
 import { useAuth } from '@/hooks/useAuth';
-import { useTransactionsContext } from '@/contexts/TransactionsContext';
+import { TransactionsProvider, useTransactionsContext } from '@/contexts/TransactionsContext';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ChatInterface } from '@/components/chat/ChatInterface';
@@ -11,17 +11,6 @@ import { Loader2, LogOut, Wallet, LayoutDashboard, MessageSquare, Plus, Upload }
 
 export default function Index() {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { 
-    transactions, 
-    filteredTransactions,
-    metrics, 
-    overallMetrics,
-    initialLoading,
-    filters,
-    setFilters,
-    deleteTransaction, 
-    updateTransaction,
-  } = useTransactionsContext();
 
   if (authLoading) {
     return (
@@ -34,6 +23,27 @@ export default function Index() {
   if (!user) {
     return <AuthPage />;
   }
+
+  // Only mount TransactionsProvider after authentication is confirmed
+  return (
+    <TransactionsProvider>
+      <AuthenticatedApp signOut={signOut} />
+    </TransactionsProvider>
+  );
+}
+
+function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
+  const { 
+    transactions, 
+    filteredTransactions,
+    metrics, 
+    overallMetrics,
+    initialLoading,
+    filters,
+    setFilters,
+    deleteTransaction, 
+    updateTransaction,
+  } = useTransactionsContext();
 
   return (
     <div className="min-h-screen bg-background">

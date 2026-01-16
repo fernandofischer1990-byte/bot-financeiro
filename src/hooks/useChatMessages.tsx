@@ -14,11 +14,17 @@ export interface ChatMessage {
 export function useChatMessages() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const fetchMessages = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
 
+    setLoading(true);
+    
     const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
@@ -27,6 +33,7 @@ export function useChatMessages() {
 
     if (error) {
       console.error('Error fetching messages:', error);
+      setLoading(false);
       return;
     }
 
