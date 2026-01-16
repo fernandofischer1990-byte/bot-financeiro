@@ -33,9 +33,12 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const { messages, addMessage, clearHistory } = useChatMessages();
   const { addTransaction, deleteAllTransactions } = useTransactionsContext();
   const { toast } = useToast();
+
+  const CHAT_TIMEOUT_MS = 60000; // 60 seconds
 
   // Memoize recent transactions to prevent re-renders
   const recentTransactions = useMemo(() => 
@@ -129,6 +132,15 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
       .trim();
   };
 
+  const cancelStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+    setStreamingContent('');
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || isStreaming) return;
 
@@ -138,6 +150,14 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
     await addMessage('user', userMessage);
     setIsStreaming(true);
     setStreamingContent('');
+
+    // Setup AbortController with timeout
+    abortControllerRef.current = new AbortController();
+    const timeoutId = setTimeout(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    }, CHAT_TIMEOUT_MS);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -163,64 +183,91 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
             recentTransactions,
           },
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erro ao enviar mensagem');
+        let errorMessage = 'Erro ao enviar mensagem';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch {
+          console.warn('Failed to parse error response');
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader');
+      if (!reader) throw new Error('Erro de conexão');
 
       const decoder = new TextDecoder();
       let fullContent = '';
       let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
+          buffer += decoder.decode(value, { stream: true });
+          
+          let newlineIndex: number;
+          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            let line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
 
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (line.startsWith(':') || line.trim() === '') continue;
-          if (!line.startsWith('data: ')) continue;
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (line.startsWith(':') || line.trim() === '') continue;
+            if (!line.startsWith('data: ')) continue;
 
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') continue;
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
 
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              fullContent += content;
-              setStreamingContent(cleanContentForDisplay(fullContent));
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                fullContent += content;
+                setStreamingContent(cleanContentForDisplay(fullContent));
+              }
+            } catch (parseError) {
+              console.debug('JSON parse retry:', parseError);
+              buffer = line + '\n' + buffer;
+              break;
             }
-          } catch {
-            buffer = line + '\n' + buffer;
-            break;
           }
         }
+      } finally {
+        reader.releaseLock();
       }
 
-      await addMessage('assistant', fullContent);
-      await parseAIResponse(fullContent);
+      if (fullContent) {
+        await addMessage('assistant', fullContent);
+        await parseAIResponse(fullContent);
+      }
       setStreamingContent('');
 
     } catch (error) {
       console.error('Chat error:', error);
+      
+      let errorMessage = 'Falha ao enviar mensagem';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Requisição cancelada ou tempo limite excedido';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: 'Erro',
-        description: error instanceof Error ? error.message : 'Falha ao enviar mensagem',
+        description: errorMessage,
         variant: 'destructive',
       });
+      setStreamingContent('');
     } finally {
+      clearTimeout(timeoutId);
+      abortControllerRef.current = null;
       setIsStreaming(false);
     }
   };
@@ -309,9 +356,15 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
             disabled={isStreaming}
             className="flex-1"
           />
-          <Button type="submit" disabled={!input.trim() || isStreaming} size="icon">
-            {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+          {isStreaming ? (
+            <Button type="button" variant="destructive" size="icon" onClick={cancelStreaming} title="Cancelar">
+              <span className="text-xs font-bold">✕</span>
+            </Button>
+          ) : (
+            <Button type="submit" disabled={!input.trim()} size="icon">
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </form>
       </div>
 
