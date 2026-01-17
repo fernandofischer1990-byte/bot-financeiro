@@ -56,8 +56,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // THEN check for existing session (never leave the app stuck in loading on failures)
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         if (!mounted) return;
+        
+        // Detectar sessão inválida/expirada
+        if (error) {
+          console.error('Erro ao recuperar sessão:', error);
+          // Se refresh token inválido, fazer logout local
+          if (error.message?.includes('Invalid Refresh Token') || 
+              error.message?.includes('refresh_token_not_found')) {
+            toast({
+              title: 'Sessão expirada',
+              description: 'Faça login novamente.',
+              variant: 'destructive',
+            });
+            setSession(null);
+            setUser(null);
+            // Tentar limpar sessão localmente
+            try {
+              await supabase.auth.signOut({ scope: 'local' });
+            } catch {}
+          }
+          return;
+        }
+        
         setSession(session);
         setUser(session?.user ?? null);
       } catch (err) {

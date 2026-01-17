@@ -8,6 +8,26 @@ import { Textarea } from '@/components/ui/textarea';
 import { Transaction } from '@/hooks/useTransactions';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/constants';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+// Normaliza valor BR (ex: "3.326,61" → 3326.61)
+function parseAmountBR(value: string): number {
+  const normalized = value
+    .replace(/\s/g, '')      // remove espaços
+    .replace(/\./g, '')      // remove pontos (milhar)
+    .replace(',', '.');      // troca vírgula por ponto
+  return parseFloat(normalized);
+}
+
+// Formata número para exibição BR
+function formatAmountBR(value: number): string {
+  return value.toLocaleString('pt-BR', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  });
+}
+
+const SAVE_TIMEOUT_MS = 15000;
 
 interface EditTransactionDialogProps {
   transaction: Transaction | null;
@@ -17,6 +37,7 @@ interface EditTransactionDialogProps {
 }
 
 export function EditTransactionDialog({ transaction, open, onOpenChange, onSave }: EditTransactionDialogProps) {
+  const { toast } = useToast();
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
@@ -27,7 +48,8 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
   useEffect(() => {
     if (transaction) {
       setType(transaction.type);
-      setAmount(transaction.amount.toString());
+      // Formata valor para exibição brasileira (3.326,61)
+      setAmount(formatAmountBR(transaction.amount));
       setCategory(transaction.category);
       setDescription(transaction.description || '');
       setDate(transaction.transaction_date);
@@ -39,18 +61,48 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
   const handleSave = async () => {
     if (!transaction) return;
     
+    // Validar valor numérico (aceita vírgula ou ponto)
+    const numAmount = parseAmountBR(amount);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+      toast({ 
+        title: 'Valor inválido', 
+        description: 'Digite um valor numérico maior que zero',
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
     setSaving(true);
-    const success = await onSave(transaction.id, {
-      type,
-      amount: parseFloat(amount),
-      category,
-      description: description || null,
-      transaction_date: date,
-    });
-    setSaving(false);
+    try {
+      // Timeout para evitar salvamento infinito
+      const timeoutPromise = new Promise<boolean>((_, reject) => 
+        setTimeout(() => reject(new Error('Tempo limite excedido')), SAVE_TIMEOUT_MS)
+      );
+      
+      const savePromise = onSave(transaction.id, {
+        type,
+        amount: numAmount,
+        category,
+        description: description || null,
+        transaction_date: date,
+      });
 
-    if (success) {
-      onOpenChange(false);
+      const success = await Promise.race([savePromise, timeoutPromise]);
+      
+      if (success) {
+        onOpenChange(false);
+      }
+    } catch (error) {
+      console.error('Erro ao salvar transação:', error);
+      toast({ 
+        title: 'Erro ao salvar', 
+        description: error instanceof Error && error.message === 'Tempo limite excedido'
+          ? 'Tempo limite excedido. Verifique sua conexão.'
+          : 'Falha ao salvar. Tente novamente.',
+        variant: 'destructive' 
+      });
+    } finally {
+      setSaving(false); // SEMPRE reseta o estado
     }
   };
 
@@ -82,8 +134,8 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
             <Label htmlFor="amount">Valor (R$)</Label>
             <Input
               id="amount"
-              type="number"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0,00"
