@@ -42,6 +42,7 @@ interface TransactionsContextValue {
   overallMetrics: TransactionMetrics;
   initialLoading: boolean;
   refreshing: boolean;
+  loadError: string | null;
   filters: FilterState;
   setFilters: (filters: FilterState) => void;
   addTransaction: (input: TransactionInput) => Promise<Transaction | null>;
@@ -52,6 +53,8 @@ interface TransactionsContextValue {
   refetch: () => Promise<void>;
 }
 
+const FETCH_TIMEOUT_MS = 15000;
+
 const TransactionsContext = createContext<TransactionsContextValue | null>(null);
 
 export function TransactionsProvider({ children }: { children: ReactNode }) {
@@ -60,6 +63,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoadedOnce = useRef(false);
   const [filters, setFilters] = useState<FilterState>({
     period: 'all',
@@ -148,28 +152,39 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setTransactions([]);
       setInitialLoading(false);
+      setLoadError(null);
       return;
     }
 
     // Only show skeleton on initial load, not on refreshes
     if (!hasLoadedOnce.current) {
       setInitialLoading(true);
+      setLoadError(null);
     } else if (!silent) {
       setRefreshing(true);
     }
 
     try {
-      const { data, error } = await supabase
+      // Timeout para evitar carregamento infinito
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Tempo limite excedido')), FETCH_TIMEOUT_MS)
+      );
+      
+      const fetchPromise = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
         .order('transaction_date', { ascending: false });
 
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
       if (error) {
+        const errorMsg = error.message || 'Erro ao carregar transações';
+        setLoadError(errorMsg);
         if (!silent) {
           toast({
             title: 'Erro ao carregar transações',
-            description: error.message,
+            description: errorMsg,
             variant: 'destructive',
           });
         }
@@ -183,13 +198,18 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       }));
 
       setTransactions(typedData);
+      setLoadError(null);
       hasLoadedOnce.current = true;
     } catch (err) {
       console.error('Falha ao buscar transações:', err);
+      const errorMsg = err instanceof Error && err.message === 'Tempo limite excedido'
+        ? 'Tempo limite excedido. Verifique sua conexão.'
+        : 'Falha de rede. Tente novamente.';
+      setLoadError(errorMsg);
       if (!silent) {
         toast({
           title: 'Erro ao carregar transações',
-          description: 'Falha de rede. Tente novamente.',
+          description: errorMsg,
           variant: 'destructive',
         });
       }
@@ -466,6 +486,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     overallMetrics,
     initialLoading,
     refreshing,
+    loadError,
     filters,
     setFilters,
     addTransaction,

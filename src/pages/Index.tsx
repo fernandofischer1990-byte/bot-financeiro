@@ -39,10 +39,12 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
     metrics, 
     overallMetrics,
     initialLoading,
+    loadError,
     filters,
     setFilters,
     deleteTransaction, 
     updateTransaction,
+    refetch,
   } = useTransactionsContext();
 
   return (
@@ -90,10 +92,12 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
               metrics={metrics}
               transactions={filteredTransactions}
               loading={initialLoading}
+              loadError={loadError}
               filters={filters}
               onFiltersChange={setFilters}
               onDeleteTransaction={deleteTransaction}
               onUpdateTransaction={updateTransaction}
+              onRetry={refetch}
             />
           </TabsContent>
 
