@@ -4,7 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Transaction } from '@/hooks/useTransactions';
+import { Transaction } from '@/contexts/TransactionsContext';
 import { formatCurrency, formatDate, getCategoryLabel, getCategoryIcon } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { Trash2, ArrowUpCircle, ArrowDownCircle, Pencil, ArrowUpDown } from 'lucide-react';

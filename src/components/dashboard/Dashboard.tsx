@@ -5,7 +5,7 @@ import { MonthlyChart } from './MonthlyChart';
 import { TransactionList } from './TransactionList';
 import { DashboardFilters, FilterState, defaultFilters } from './DashboardFilters';
 import { EditTransactionDialog } from './EditTransactionDialog';
-import { TransactionMetrics, Transaction } from '@/hooks/useTransactions';
+import { TransactionMetrics, Transaction } from '@/contexts/TransactionsContext';
 import { Wallet, TrendingUp, TrendingDown, RefreshCw, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
