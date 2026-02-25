@@ -1,13 +1,7 @@
 // Robust parsing for AI action responses with normalization
 import { z } from 'zod';
-import { ALL_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './constants';
-import { suggestCategory } from './categoryMapping';
-import { getLocalISODate } from './dateUtils';
-
-// Valid category values for validation
-const VALID_EXPENSE_CATEGORIES = EXPENSE_CATEGORIES.map(c => c.value) as string[];
-const VALID_INCOME_CATEGORIES = INCOME_CATEGORIES.map(c => c.value) as string[];
-const ALL_VALID_CATEGORIES = ALL_CATEGORIES.map(c => c.value) as string[];
+import { normalizeAmount, normalizeCategory } from './transactionNormalization';
+import { normalizeToLocalDate } from './dateUtils';
 
 // Flexible schema that accepts both number and string for amount
 const RawActionSchema = z.object({
@@ -36,112 +30,6 @@ export interface ParseResult {
   success: boolean;
   action?: ParsedAction;
   error?: string;
-}
-
-/**
- * Normalize amount from various formats to a number
- * Handles: "50", "50,00", "50.00", "R$ 50,00", "R$50", etc.
- */
-function normalizeAmount(value: unknown): number | null {
-  if (typeof value === 'number') {
-    return isNaN(value) || value <= 0 ? null : value;
-  }
-  
-  if (typeof value !== 'string') {
-    return null;
-  }
-  
-  // Remove currency symbols, spaces, and common prefixes
-  let cleaned = value
-    .replace(/R\$\s*/gi, '')
-    .replace(/\s/g, '')
-    .trim();
-  
-  // Handle Brazilian format: 1.234,56 -> 1234.56
-  // If there's a comma, treat it as decimal separator
-  if (cleaned.includes(',')) {
-    // Remove thousand separators (dots before comma)
-    cleaned = cleaned.replace(/\./g, '');
-    // Replace comma with dot for decimal
-    cleaned = cleaned.replace(',', '.');
-  }
-  
-  const parsed = parseFloat(cleaned);
-  return isNaN(parsed) || parsed <= 0 ? null : parsed;
-}
-
-/**
- * Normalize date from various formats to YYYY-MM-DD
- * Handles: "2025-01-11", "11/01/2025", "11-01-2025", etc.
- */
-function normalizeDate(value: unknown): string {
-  const today = getLocalISODate();
-  
-  if (!value || typeof value !== 'string') {
-    return today;
-  }
-  
-  const trimmed = value.trim();
-  
-  // Already in ISO format YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-  
-  // Brazilian format DD/MM/YYYY or DD-MM-YYYY
-  const brMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (brMatch) {
-    const [, day, month, year] = brMatch;
-    const d = day.padStart(2, '0');
-    const m = month.padStart(2, '0');
-    return `${year}-${m}-${d}`;
-  }
-  
-  // Try parsing with Date
-  const parsed = new Date(trimmed);
-  if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().split('T')[0];
-  }
-  
-  return today;
-}
-
-/**
- * Normalize and validate category based on transaction type
- * Falls back to suggestCategory or default category if invalid
- */
-function normalizeCategory(
-  value: unknown,
-  type: 'income' | 'expense',
-  description?: string
-): string {
-  const defaultCategory = type === 'expense' ? 'outros_despesa' : 'outros_receita';
-  const validCategories = type === 'expense' ? VALID_EXPENSE_CATEGORIES : VALID_INCOME_CATEGORIES;
-  
-  if (typeof value === 'string' && value.trim()) {
-    const normalized = value.trim().toLowerCase();
-    
-    // Direct match
-    if (validCategories.includes(normalized)) {
-      return normalized;
-    }
-    
-    // Check if it's in any valid category (might be wrong type)
-    if (ALL_VALID_CATEGORIES.includes(normalized)) {
-      // It's a valid category but wrong type, use suggestion instead
-      if (description) {
-        return suggestCategory(description, type);
-      }
-      return defaultCategory;
-    }
-  }
-  
-  // Try to suggest based on description
-  if (description) {
-    return suggestCategory(description, type);
-  }
-  
-  return defaultCategory;
 }
 
 /**
@@ -199,13 +87,13 @@ export function parseAction(jsonString: string): ParseResult {
       }
       
       const amount = normalizeAmount(raw.amount);
-      if (amount === null) {
+      if (amount === null || amount <= 0) {
         return { success: false, error: 'Valor inválido ou não fornecido' };
       }
       
       const description = raw.description?.trim() || '';
       const category = normalizeCategory(raw.category, raw.type, description);
-      const date = normalizeDate(raw.date);
+      const date = normalizeToLocalDate(raw.date);
       
       return {
         success: true,
