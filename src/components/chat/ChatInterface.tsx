@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatMessages, ChatMessage } from '@/hooks/useChatMessages';
-import { useTransactionsContext, TransactionMetrics, Transaction } from '@/contexts/TransactionsContext';
+import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, User, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,13 +21,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-interface ChatInterfaceProps {
-  metrics: TransactionMetrics;
-  transactions: Transaction[];
-  onDeleteTransaction?: (id: string) => Promise<boolean>;
-}
-
-export function ChatInterface({ metrics, transactions, onDeleteTransaction }: ChatInterfaceProps) {
+export function ChatInterface() {
+  const { overallMetrics: metrics, transactions, deleteTransaction } = useTransactionsContext();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -93,8 +88,8 @@ export function ChatInterface({ metrics, transactions, onDeleteTransaction }: Ch
           description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}`,
         });
       }
-    } else if (action.action === 'delete_transaction' && action.id && onDeleteTransaction) {
-      const success = await onDeleteTransaction(action.id);
+    } else if (action.action === 'delete_transaction' && action.id) {
+      const success = await deleteTransaction(action.id);
       if (success) {
         toast({
           title: '🗑️ Transação excluída!',

@@ -34,10 +34,8 @@ export default function Index() {
 
 function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
   const { 
-    transactions, 
     filteredTransactions,
     metrics, 
-    overallMetrics,
     initialLoading,
     loadError,
     filters,
@@ -102,11 +100,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
           </TabsContent>
 
           <TabsContent value="chat" className="h-[calc(100vh-200px)]">
-            <ChatInterface 
-              metrics={overallMetrics} 
-              transactions={transactions} 
-              onDeleteTransaction={deleteTransaction} 
-            />
+            <ChatInterface />
           </TabsContent>
 
           <TabsContent value="add">

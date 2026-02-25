@@ -53,7 +53,7 @@ interface TransactionsContextValue {
   refetch: () => Promise<void>;
 }
 
-const FETCH_TIMEOUT_MS = 15000;
+const FETCH_TIMEOUT_MS = 30000;
 
 const TransactionsContext = createContext<TransactionsContextValue | null>(null);
 
