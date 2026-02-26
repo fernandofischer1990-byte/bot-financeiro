@@ -60,11 +60,14 @@ const TransactionsContext = createContext<TransactionsContextValue | null>(null)
 export function TransactionsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoadedOnce = useRef(false);
+  const fetchingRef = useRef(false);
   const [filters, setFilters] = useState<FilterState>({
     period: 'all',
     type: 'all',
@@ -156,6 +159,10 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Prevent concurrent fetches
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
     // Only show skeleton on initial load, not on refreshes
     if (!hasLoadedOnce.current) {
       setInitialLoading(true);
@@ -182,7 +189,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
         const errorMsg = error.message || 'Erro ao carregar transações';
         setLoadError(errorMsg);
         if (!silent) {
-          toast({
+          toastRef.current({
             title: 'Erro ao carregar transações',
             description: errorMsg,
             variant: 'destructive',
@@ -202,22 +209,23 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       hasLoadedOnce.current = true;
     } catch (err) {
       console.error('Falha ao buscar transações:', err);
-      const errorMsg = err instanceof Error && err.message === 'Tempo limite excedido'
-        ? 'Tempo limite excedido. Verifique sua conexão.'
-        : 'Falha de rede. Tente novamente.';
-      setLoadError(errorMsg);
       if (!silent) {
-        toast({
+        const errorMsg = err instanceof Error && err.message === 'Tempo limite excedido'
+          ? 'Tempo limite excedido. Verifique sua conexão.'
+          : 'Falha de rede. Tente novamente.';
+        setLoadError(errorMsg);
+        toastRef.current({
           title: 'Erro ao carregar transações',
           description: errorMsg,
           variant: 'destructive',
         });
       }
     } finally {
+      fetchingRef.current = false;
       setInitialLoading(false);
       setRefreshing(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
   const addTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
     if (!user) return null;

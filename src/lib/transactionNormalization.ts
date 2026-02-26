@@ -8,8 +8,40 @@ const VALID_INCOME_CATEGORIES: string[] = INCOME_CATEGORIES.map(c => c.value);
 const ALL_VALID_CATEGORIES: string[] = ALL_CATEGORIES.map(c => c.value);
 
 /**
+ * Normalize a string key: trim, lowercase, remove accents
+ */
+function normalizeKey(key: string): string {
+  return key
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Find a column value in a row using case-insensitive, accent-insensitive matching.
+ * Tries exact match first, then normalized match.
+ */
+function findColumnValue(row: Record<string, unknown>, possibleNames: string[]): unknown {
+  // 1. Exact match
+  for (const name of possibleNames) {
+    if (name in row) return row[name];
+  }
+
+  // 2. Normalized match against row keys
+  const normalizedNames = new Set(possibleNames.map(normalizeKey));
+  for (const key of Object.keys(row)) {
+    if (normalizedNames.has(normalizeKey(key))) {
+      return row[key];
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Normalize amount from various formats to a number
- * Handles: "50", "50,00", "50.00", "R$ 50,00", negative values, etc.
+ * Handles: "50", "50,00", "50.00", "R$ 50,00", "R$15,73", "1 234,56", negative values, etc.
  */
 export function normalizeAmount(value: unknown): number | null {
   if (typeof value === 'number') {
@@ -20,10 +52,9 @@ export function normalizeAmount(value: unknown): number | null {
     return null;
   }
   
-  // Remove currency symbols, spaces, and common prefixes
+  // Remove currency symbols, spaces used as thousand separators, and common prefixes
   let cleaned = value
     .replace(/R\$\s*/gi, '')
-    .replace(/\s/g, '')
     .trim();
   
   // Handle negative values
@@ -31,6 +62,9 @@ export function normalizeAmount(value: unknown): number | null {
   if (isNegative) {
     cleaned = cleaned.substring(1);
   }
+
+  // Remove spaces (could be thousand separators like "1 234,56")
+  cleaned = cleaned.replace(/\s/g, '');
   
   // Handle Brazilian format: 1.234,56 -> 1234.56
   if (cleaned.includes(',')) {
@@ -156,12 +190,12 @@ export function normalizeTransactionRow(
   rowIndex: number
 ): NormalizedTransactionRow {
   try {
-    // Extract raw values with various column name possibilities
-    const rawAmount = row['valor'] || row['amount'] || row['Valor'] || row['Amount'] || row['value'] || row['Value'] || 0;
-    const rawType = row['tipo'] || row['type'] || row['Tipo'] || row['Type'] || '';
-    const rawCategory = row['categoria'] || row['category'] || row['Categoria'] || row['Category'] || '';
-    const rawDescription = row['descricao'] || row['description'] || row['Descrição'] || row['Description'] || row['desc'] || '';
-    const rawDate = row['data'] || row['date'] || row['Data'] || row['Date'] || '';
+    // Extract raw values with flexible column name matching
+    const rawAmount = findColumnValue(row, ['valor', 'Valor', 'amount', 'Amount', 'value', 'Value', 'valores', 'montante', 'quantia']) ?? 0;
+    const rawType = findColumnValue(row, ['tipo', 'type', 'Tipo', 'Type']) ?? '';
+    const rawCategory = findColumnValue(row, ['categoria', 'category', 'Categoria', 'Category']) ?? '';
+    const rawDescription = findColumnValue(row, ['descricao', 'description', 'Descrição', 'Description', 'desc', 'Desc', 'historico', 'Historico', 'Histórico']) ?? '';
+    const rawDate = findColumnValue(row, ['data', 'date', 'Data', 'Date', 'dt', 'Dt']) ?? '';
     
     // Normalize amount
     const amount = normalizeAmount(rawAmount);
