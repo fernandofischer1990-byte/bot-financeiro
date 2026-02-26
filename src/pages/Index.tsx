@@ -1,5 +1,5 @@
 import { useAuth } from '@/hooks/useAuth';
-import { TransactionsProvider, useTransactionsContext } from '@/contexts/TransactionsContext';
+import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ChatInterface } from '@/components/chat/ChatInterface';
@@ -24,12 +24,7 @@ export default function Index() {
     return <AuthPage />;
   }
 
-  // Only mount TransactionsProvider after authentication is confirmed
-  return (
-    <TransactionsProvider>
-      <AuthenticatedApp signOut={signOut} />
-    </TransactionsProvider>
-  );
+  return <AuthenticatedApp signOut={signOut} />;
 }
 
 function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
