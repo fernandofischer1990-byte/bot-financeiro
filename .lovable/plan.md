@@ -1,145 +1,76 @@
 
 
-# Auditoria Completa de Higienizacao e Sanitizacao
+# Diagnostico e Correcoes: Dashboard, Chat, Parsing e Import
 
-## Resumo da Analise
+## Causas Raiz Identificadas
 
-Apos varredura completa de todos os arquivos do projeto (frontend, backend, integrações, utilitarios), o codigo esta em **bom estado geral**. A limpeza anterior (remoção do hook duplicado `useTransactions.tsx`) resolveu o problema critico. No entanto, identifiquei **7 problemas** que precisam ser corrigidos.
+### 1. Dashboard lento / Timeout
+O console mostra "Tempo limite excedido" em 12:11:26, mas os 3 GETs em 12:10:34-35 retornaram 200 OK com dados. Causa: o realtime subscription dispara `fetchTransactions(true)` silenciosamente, e nao ha protecao contra chamadas concorrentes. Quando uma fetch silenciosa coincide com outra, o `Promise.race` com timeout de 30s pode rejeitar uma delas. Alem disso, mudancas no `toast` (referencia instavel) recriam `fetchTransactions` via useCallback, causando re-subscribe no realtime e fetches extras.
 
----
+**Correcao:**
+- Adicionar `fetchingRef` para impedir fetches concorrentes
+- Remover `toast` da dependencia do `fetchTransactions` (usar ref)
+- Nao mostrar toast de erro em refreshes silenciosos (ja esta parcialmente feito, mas o catch tambem precisa checar `silent`)
 
-## Problemas Encontrados
+### 2. Chat timeout
+O chat tem timeout de 60s, que e adequado. O problema real e que o erro de timeout do `fetchTransactions` aparece no console e o usuario confunde com erro do chat. Alem disso, apos o chat inserir uma transacao via `addTransaction`, o realtime dispara um `fetchTransactions` silencioso que pode falhar com timeout, gerando um toast de erro *aparente* no chat.
 
-### 1. CODIGO MORTO: `src/components/NavLink.tsx`
-- Componente nunca importado por nenhum arquivo
-- 28 linhas de codigo morto
-- **Acao:** Deletar
+**Correcao:** Ja resolvido pelo fix do item 1 (impedir fetches concorrentes e silenciar erros em refresh silencioso).
 
-### 2. CODIGO MORTO: `@tanstack/react-query` sem uso
-- `QueryClient` e `QueryClientProvider` estão configurados em `App.tsx` mas nenhum componente usa `useQuery`, `useMutation` ou qualquer hook do React Query
-- Todo o gerenciamento de dados usa o `TransactionsContext` diretamente
-- **Acao:** Remover import e wrapper do `App.tsx` (a dependencia pode ficar no `package.json` para uso futuro)
+### 3. Parsing de valores (ponto vs virgula)
+- `TransactionForm`: ja faz `parseFloat(amount.replace(',', '.'))` — funciona corretamente
+- `normalizeAmount`: trata formato brasileiro (remove pontos de milhar, substitui virgula por ponto) — funciona corretamente
+- `actionParser`: usa `normalizeAmount` do `transactionNormalization` — funciona corretamente
 
-### 3. DUPLICACAO DE LOGICA: `normalizeAmount` e `normalizeCategory` duplicados
-- `src/lib/actionParser.ts` tem suas proprias versoes de `normalizeAmount`, `normalizeDate` e `normalizeCategory`
-- `src/lib/transactionNormalization.ts` tem versoes identicas (e mais robustas) das mesmas funcoes
-- Risco: divergencia futura entre as duas implementacoes
-- **Acao:** Refatorar `actionParser.ts` para importar de `transactionNormalization.ts` e `dateUtils.ts`, removendo as duplicatas
+Nao ha bug real no parsing individual. O problema esta na importacao de planilhas (item 4).
 
-### 4. PROBLEMA DE TIMEOUT: Erro de "Tempo limite excedido" no console
-- O log mostra `Falha ao buscar transações: Error: Tempo limite excedido`
-- O `FETCH_TIMEOUT_MS` esta em 15 segundos, que pode ser curto em conexoes lentas
-- Alem disso, o `Promise.race` com o timeout nao cancela a query real do Supabase - ela continua rodando em background
-- **Acao:** Aumentar timeout para 30 segundos e adicionar `AbortController` para cancelar a query real
+### 4. Importacao de planilhas com "Valor invalido"
+**Causa raiz encontrada:** A funcao `normalizeTransactionRow` procura colunas com nomes especificos: `valor`, `Valor`, `amount`, etc. Se a planilha do usuario tem um nome de coluna diferente (ex: `VALOR`, `  Valor  `, `Valores`, ou com acento `Descrição`), o match falha e `rawAmount` fica como `0`, retornando "Valor inválido ou zero" para todas as linhas.
 
-### 5. ACOPLAMENTO: `ChatInterface` recebe props que ja tem via contexto
-- `ChatInterface` recebe `metrics`, `transactions` e `onDeleteTransaction` como props
-- Mas internamente ja importa `useTransactionsContext` para `addTransaction` e `deleteAllTransactions`
-- Isso cria duas fontes de dados: props vs contexto
-- **Acao:** Simplificar `ChatInterface` para consumir tudo do contexto, eliminando as props
+Alem disso, o XLSX pode retornar headers com espacos extras ou formatacao inesperada. A busca atual e case-sensitive e exata.
 
-### 6. INCONSISTENCIA DE TIPOS: `DashboardFilters.FilterState` tem `startDate/endDate` como `Date | null`, mas o contexto armazena como state
-- O filtro por periodo funciona, mas a filtragem em `TransactionsContext` compara `Date` objects com strings parseadas, criando um ponto fragil
-- **Acao:** Nenhuma mudanca necessaria agora (funciona corretamente), mas documentar como debito tecnico
-
-### 7. EDGE FUNCTIONS: Headers CORS incompletos
-- Ambas edge functions (`chat` e `parse-statement`) usam headers CORS sem os headers extras recomendados pela plataforma
-- Atual: `authorization, x-client-info, apikey, content-type`
-- Recomendado: incluir `x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version`
-- **Acao:** Atualizar CORS headers nas duas edge functions
+**Correcao:** Implementar busca de colunas case-insensitive e com normalizacao (trim, lowercase, remover acentos), semelhante ao pattern sugerido no stack-overflow context.
 
 ---
 
 ## Plano de Implementacao
 
-### Passo 1: Deletar codigo morto
-- Deletar `src/components/NavLink.tsx`
+### Passo 1: TransactionsContext — Impedir fetches concorrentes e estabilizar dependencias
 
-### Passo 2: Remover React Query nao utilizado do App.tsx
-```
-// DE:
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-const queryClient = new QueryClient();
-<QueryClientProvider client={queryClient}>
-  ...
-</QueryClientProvider>
+**Arquivo:** `src/contexts/TransactionsContext.tsx`
 
-// PARA:
-// Remover import e wrapper, manter apenas o conteudo interno
-```
+- Adicionar `fetchingRef = useRef(false)` para impedir chamadas concorrentes
+- Mover `toast` para um ref (`toastRef`) para remover da dependencia do `fetchTransactions`
+- No `fetchTransactions`: checar `fetchingRef.current` no inicio, setar como `true`, resetar no `finally`
+- No `catch` do `fetchTransactions`: nao mostrar toast quando `silent === true`
 
-### Passo 3: Unificar funcoes duplicadas no actionParser.ts
-- Remover `normalizeAmount`, `normalizeDate` e `normalizeCategory` locais
-- Importar `normalizeAmount`, `normalizeCategory` de `@/lib/transactionNormalization`
-- Importar `normalizeToLocalDate` de `@/lib/dateUtils` (substituindo `normalizeDate`)
-- Manter apenas `parseAction` e `extractAction` como logica propria
+### Passo 2: Melhorar deteccao de colunas na importacao de planilhas
 
-### Passo 4: Simplificar ChatInterface - remover props redundantes
-- Remover `ChatInterfaceProps` (metrics, transactions, onDeleteTransaction)
-- Consumir tudo via `useTransactionsContext()`:
-  - `overallMetrics` em vez de prop `metrics`
-  - `transactions` em vez de prop `transactions`
-  - `deleteTransaction` em vez de prop `onDeleteTransaction`
-- Atualizar `Index.tsx` para nao passar mais essas props
+**Arquivo:** `src/lib/transactionNormalization.ts`
 
-### Passo 5: Aumentar timeout e melhorar fetch no TransactionsContext
-- `FETCH_TIMEOUT_MS`: 15000 -> 30000
-- Sem outras mudancas estruturais (o flow ja funciona)
+- Criar funcao `findColumnValue(row, possibleNames)` que:
+  1. Tenta match exato nas chaves do row
+  2. Se nao encontrar, normaliza as chaves (trim, lowercase, remover acentos) e tenta match
+  3. Retorna o valor encontrado ou `undefined`
+- Atualizar `normalizeTransactionRow` para usar `findColumnValue` em vez de acesso direto por chave
+- Adicionar mais variantes de nomes: `VALOR`, `valores`, `montante`, `quantia`, `AMOUNT`, `VALUE`, `DESCRICAO`, `DESC`, etc.
 
-### Passo 6: Atualizar CORS das edge functions
-- Adicionar headers extras em `supabase/functions/chat/index.ts`
-- Adicionar headers extras em `supabase/functions/parse-statement/index.ts`
+### Passo 3: Melhorar `normalizeAmount` para mais formatos
 
----
+**Arquivo:** `src/lib/transactionNormalization.ts`
 
-## Verificacao de Integridade dos 3 Fluxos
-
-### Fluxo 1: Chat -> Dashboard
-```text
-ChatInterface.sendMessage()
-  -> edge function /chat (streaming)
-  -> parseAIResponse() extrai <!--ACTION:...-->
-  -> addTransaction() do TransactionsContext
-  -> optimistic update no state local
-  -> Dashboard re-renderiza com novos dados
-  -> realtime subscription faz sync silencioso (500ms debounce)
-```
-**Status:** Funcional. Apos Passo 4, ficara mais limpo sem props intermediarias.
-
-### Fluxo 2: Manual -> Dashboard
-```text
-TransactionForm.handleSubmit()
-  -> addTransaction() do TransactionsContext
-  -> optimistic update no state local
-  -> Dashboard re-renderiza com novos dados
-```
-**Status:** Funcional. Nenhuma mudanca necessaria.
-
-### Fluxo 3: Import -> Dashboard
-```text
-FileUpload.handleFileChange()
-  -> parsePDF() ou parseSpreadsheet()
-  -> TransactionPreview (selecao do usuario)
-  -> addMultipleTransactions() do TransactionsContext
-  -> optimistic update no state local
-  -> Dashboard re-renderiza com novos dados
-```
-**Status:** Funcional. Nenhuma mudanca necessaria.
+- Adicionar tratamento para valores que o XLSX pode retornar como numero direto (ja funciona)
+- Adicionar tratamento para string com espaco como separador de milhar: `1 234,56`
+- Garantir que `"R$15,73"` (sem espaco) tambem funciona
 
 ---
 
 ## Resumo das Alteracoes
 
-| # | Arquivo | Acao | Impacto |
-|---|---------|------|---------|
-| 1 | `src/components/NavLink.tsx` | Deletar | Codigo morto |
-| 2 | `src/App.tsx` | Remover React Query wrapper | Simplificacao |
-| 3 | `src/lib/actionParser.ts` | Refatorar imports, remover duplicatas | ~60 linhas removidas |
-| 4 | `src/components/chat/ChatInterface.tsx` | Consumir contexto direto | Desacoplamento |
-| 5 | `src/pages/Index.tsx` | Remover props do ChatInterface | Simplificacao |
-| 6 | `src/contexts/TransactionsContext.tsx` | Timeout 15s -> 30s | Estabilidade |
-| 7 | `supabase/functions/chat/index.ts` | CORS headers completos | Compatibilidade |
-| 8 | `supabase/functions/parse-statement/index.ts` | CORS headers completos | Compatibilidade |
+| # | Arquivo | Acao | Problema Resolvido |
+|---|---------|------|--------------------|
+| 1 | `src/contexts/TransactionsContext.tsx` | Guard de fetch concorrente + estabilizar deps | Timeout, fetches duplicados |
+| 2 | `src/lib/transactionNormalization.ts` | Busca de colunas case-insensitive + mais formatos de valor | Import falhando |
 
-Total: 1 arquivo deletado, 7 arquivos modificados. Todos os 3 fluxos (Chat, Manual, Import) continuarao funcionando sem regressao.
+Total: 2 arquivos modificados. Os 3 fluxos (Chat, Manual, Import) continuarao funcionando e o dashboard carregara sem timeouts espurios.
 
