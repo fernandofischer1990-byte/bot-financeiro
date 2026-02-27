@@ -3,7 +3,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { FilterState } from '@/components/dashboard/DashboardFilters';
-import { getLocalISODate, parseDateOnly } from '@/lib/dateUtils';
+import { parseDateOnly } from '@/lib/dateUtils';
+import { calculateMetrics } from '@/lib/metricsCalculator';
+import {
+  fetchUserTransactions,
+  insertTransaction,
+  insertMultipleTransactions,
+  updateTransactionById,
+  deleteTransactionById,
+  deleteUserTransactions,
+} from '@/services/transactionService';
 
 export interface Transaction {
   id: string;
@@ -53,9 +62,14 @@ interface TransactionsContextValue {
   refetch: () => Promise<void>;
 }
 
-const FETCH_TIMEOUT_MS = 30000;
-
 const TransactionsContext = createContext<TransactionsContextValue | null>(null);
+
+function sortByDateDesc(txs: Transaction[]): Transaction[] {
+  return txs.sort((a, b) =>
+    b.transaction_date.localeCompare(a.transaction_date) ||
+    b.created_at.localeCompare(a.created_at)
+  );
+}
 
 export function TransactionsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -76,61 +90,10 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     endDate: null,
   });
 
-  const calculateMetrics = useCallback((txs: Transaction[]): TransactionMetrics => {
-    let totalIncome = 0;
-    let totalExpenses = 0;
-    const byCategory: Record<string, number> = {};
-    const monthlyMap: Record<string, { income: number; expenses: number }> = {};
-
-    for (const tx of txs) {
-      const amount = Number(tx.amount);
-      
-      if (tx.type === 'income') {
-        totalIncome += amount;
-      } else {
-        totalExpenses += amount;
-      }
-
-      byCategory[tx.category] = (byCategory[tx.category] || 0) + amount;
-
-      const monthKey = tx.transaction_date.substring(0, 7);
-      if (!monthlyMap[monthKey]) {
-        monthlyMap[monthKey] = { income: 0, expenses: 0 };
-      }
-      if (tx.type === 'income') {
-        monthlyMap[monthKey].income += amount;
-      } else {
-        monthlyMap[monthKey].expenses += amount;
-      }
-    }
-
-    const monthlyData = Object.entries(monthlyMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([month, data]) => ({
-        month: new Date(month + '-01').toLocaleDateString('pt-BR', { month: 'short' }),
-        ...data,
-      }));
-
-    return {
-      totalBalance: totalIncome - totalExpenses,
-      totalIncome,
-      totalExpenses,
-      byCategory,
-      monthlyData,
-    };
-  }, []);
-
-  // Apply filters using local date parsing
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
-      if (filters.type !== 'all' && tx.type !== filters.type) {
-        return false;
-      }
-
-      if (filters.category !== 'all' && tx.category !== filters.category) {
-        return false;
-      }
+      if (filters.type !== 'all' && tx.type !== filters.type) return false;
+      if (filters.category !== 'all' && tx.category !== filters.category) return false;
 
       if (filters.startDate && filters.endDate) {
         const txDate = parseDateOnly(tx.transaction_date);
@@ -138,18 +101,15 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
         startDate.setHours(0, 0, 0, 0);
         const endDate = new Date(filters.endDate);
         endDate.setHours(23, 59, 59, 999);
-        
-        if (txDate < startDate || txDate > endDate) {
-          return false;
-        }
+        if (txDate < startDate || txDate > endDate) return false;
       }
 
       return true;
     });
   }, [transactions, filters]);
 
-  const metrics = useMemo(() => calculateMetrics(filteredTransactions), [filteredTransactions, calculateMetrics]);
-  const overallMetrics = useMemo(() => calculateMetrics(transactions), [transactions, calculateMetrics]);
+  const metrics = useMemo(() => calculateMetrics(filteredTransactions), [filteredTransactions]);
+  const overallMetrics = useMemo(() => calculateMetrics(transactions), [transactions]);
 
   const fetchTransactions = useCallback(async (silent = false) => {
     if (!user) {
@@ -159,11 +119,9 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Prevent concurrent fetches
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
-    // Only show skeleton on initial load, not on refreshes
     if (!hasLoadedOnce.current) {
       setInitialLoading(true);
       setLoadError(null);
@@ -171,213 +129,83 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       setRefreshing(true);
     }
 
-    try {
-      // Timeout para evitar carregamento infinito
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Tempo limite excedido')), FETCH_TIMEOUT_MS)
-      );
-      
-      const fetchPromise = supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('transaction_date', { ascending: false });
-
-      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
-
-      if (error) {
-        const errorMsg = error.message || 'Erro ao carregar transações';
-        setLoadError(errorMsg);
-        if (!silent) {
-          toastRef.current({
-            title: 'Erro ao carregar transações',
-            description: errorMsg,
-            variant: 'destructive',
-          });
-        }
-        return;
-      }
-
-      const typedData = (data || []).map((tx) => ({
-        ...tx,
-        type: tx.type as 'income' | 'expense',
-        source: tx.source as 'manual' | 'chat' | 'upload',
-      }));
-
-      setTransactions(typedData);
-      setLoadError(null);
-      hasLoadedOnce.current = true;
-    } catch (err) {
-      console.error('Falha ao buscar transações:', err);
-      if (!silent) {
-        const errorMsg = err instanceof Error && err.message === 'Tempo limite excedido'
-          ? 'Tempo limite excedido. Verifique sua conexão.'
-          : 'Falha de rede. Tente novamente.';
-        setLoadError(errorMsg);
-        toastRef.current({
-          title: 'Erro ao carregar transações',
-          description: errorMsg,
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      fetchingRef.current = false;
-      setInitialLoading(false);
-      setRefreshing(false);
-    }
-  }, [user]);
-
-  const addTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
-    if (!user) return null;
-
-    const transactionDate = input.transaction_date || getLocalISODate();
-
-    const { data, error } = await supabase
-      .from('transactions')
-      .insert({
-        user_id: user.id,
-        type: input.type,
-        amount: input.amount,
-        category: input.category,
-        description: input.description || null,
-        transaction_date: transactionDate,
-        source: input.source || 'manual',
-      })
-      .select()
-      .single();
+    const { data, error } = await fetchUserTransactions(user.id);
 
     if (error) {
-      toast({
-        title: 'Erro ao adicionar transação',
-        description: error.message,
-        variant: 'destructive',
-      });
+      setLoadError(error);
+      if (!silent) {
+        toastRef.current({ title: 'Erro ao carregar transações', description: error, variant: 'destructive' });
+      }
+    } else {
+      setTransactions(data);
+      setLoadError(null);
+      hasLoadedOnce.current = true;
+    }
+
+    fetchingRef.current = false;
+    setInitialLoading(false);
+    setRefreshing(false);
+  }, [user]);
+
+  const handleAddTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
+    if (!user) return null;
+
+    const { data, error } = await insertTransaction(user.id, input);
+
+    if (error || !data) {
+      toast({ title: 'Erro ao adicionar transação', description: error || 'Erro desconhecido', variant: 'destructive' });
       return null;
     }
 
-    const newTransaction: Transaction = {
-      ...data,
-      type: data.type as 'income' | 'expense',
-      source: data.source as 'manual' | 'chat' | 'upload',
-    };
-
-    // Optimistic update: add to state immediately
-    setTransactions(prev => {
-      // Sort by date descending after adding
-      const updated = [newTransaction, ...prev];
-      return updated.sort((a, b) => 
-        b.transaction_date.localeCompare(a.transaction_date) || 
-        b.created_at.localeCompare(a.created_at)
-      );
-    });
-
-    return newTransaction;
+    setTransactions(prev => sortByDateDesc([data, ...prev]));
+    return data;
   }, [user, toast]);
 
-  const addMultipleTransactions = useCallback(async (inputs: TransactionInput[]): Promise<number> => {
+  const handleAddMultiple = useCallback(async (inputs: TransactionInput[]): Promise<number> => {
     if (!user || inputs.length === 0) return 0;
 
-    const { data, error } = await supabase
-      .from('transactions')
-      .insert(
-        inputs.map(input => ({
-          user_id: user.id,
-          type: input.type,
-          amount: input.amount,
-          category: input.category,
-          description: input.description || null,
-          transaction_date: input.transaction_date || getLocalISODate(),
-          source: input.source || 'upload',
-        }))
-      )
-      .select();
+    const { data, error } = await insertMultipleTransactions(user.id, inputs);
 
     if (error) {
-      toast({
-        title: 'Erro ao importar transações',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao importar transações', description: error, variant: 'destructive' });
       return 0;
     }
 
-    // Optimistic update: add all new transactions
-    if (data && data.length > 0) {
-      const newTransactions: Transaction[] = data.map(tx => ({
-        ...tx,
-        type: tx.type as 'income' | 'expense',
-        source: tx.source as 'manual' | 'chat' | 'upload',
-      }));
-
-      setTransactions(prev => {
-        const updated = [...newTransactions, ...prev];
-        return updated.sort((a, b) => 
-          b.transaction_date.localeCompare(a.transaction_date) || 
-          b.created_at.localeCompare(a.created_at)
-        );
-      });
+    if (data.length > 0) {
+      setTransactions(prev => sortByDateDesc([...data, ...prev]));
     }
 
-    return data?.length || 0;
+    return data.length;
   }, [user, toast]);
 
-  const updateTransaction = useCallback(async (id: string, updates: Partial<Transaction>): Promise<boolean> => {
+  const handleUpdate = useCallback(async (id: string, updates: Partial<Transaction>): Promise<boolean> => {
     if (!user) return false;
 
-    const { error } = await supabase
-      .from('transactions')
-      .update({
-        type: updates.type,
-        amount: updates.amount,
-        category: updates.category,
-        description: updates.description,
-        transaction_date: updates.transaction_date,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .eq('user_id', user.id);
+    const { error } = await updateTransactionById(user.id, id, updates);
 
     if (error) {
-      toast({
-        title: 'Erro ao atualizar transação',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao atualizar transação', description: error, variant: 'destructive' });
       return false;
     }
 
-    // Optimistic update
-    setTransactions(prev => prev.map(tx => 
-      tx.id === id 
-        ? { ...tx, ...updates, updated_at: new Date().toISOString() } 
-        : tx
+    setTransactions(prev => prev.map(tx =>
+      tx.id === id ? { ...tx, ...updates, updated_at: new Date().toISOString() } : tx
     ));
-
     toast({ title: '✅ Transação atualizada!' });
     return true;
   }, [user, toast]);
 
-  const deleteTransaction = useCallback(async (id: string): Promise<boolean> => {
+  const handleDelete = useCallback(async (id: string): Promise<boolean> => {
     if (!user) return false;
 
-    // Optimistic update: remove immediately
     const previousTransactions = transactions;
     setTransactions(prev => prev.filter(tx => tx.id !== id));
 
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
+    const { error } = await deleteTransactionById(user.id, id);
 
     if (error) {
-      // Rollback on error
       setTransactions(previousTransactions);
-      toast({
-        title: 'Erro ao excluir transação',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao excluir transação', description: error, variant: 'destructive' });
       return false;
     }
 
@@ -385,69 +213,30 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     return true;
   }, [user, toast, transactions]);
 
-  const deleteAllTransactions = useCallback(async (filter: 'all' | 'income' | 'expense' = 'all'): Promise<number> => {
+  const handleDeleteAll = useCallback(async (filter: 'all' | 'income' | 'expense' = 'all'): Promise<number> => {
     if (!user) return 0;
 
-    // Count how many will be deleted for feedback
-    const toDelete = filter === 'all' 
-      ? transactions 
-      : transactions.filter(tx => tx.type === filter);
-    
+    const toDelete = filter === 'all' ? transactions : transactions.filter(tx => tx.type === filter);
     const count = toDelete.length;
-    
     if (count === 0) {
       toast({ title: 'Nenhuma transação para excluir' });
       return 0;
     }
 
-    // Optimistic update: remove immediately
     const previousTransactions = transactions;
-    setTransactions(prev => 
-      filter === 'all' 
-        ? [] 
-        : prev.filter(tx => tx.type !== filter)
-    );
+    setTransactions(prev => filter === 'all' ? [] : prev.filter(tx => tx.type !== filter));
 
-    try {
-      let query = supabase
-        .from('transactions')
-        .delete()
-        .eq('user_id', user.id);
+    const { error } = await deleteUserTransactions(user.id, filter);
 
-      if (filter !== 'all') {
-        query = query.eq('type', filter);
-      }
-
-      const { error } = await query;
-
-      if (error) {
-        // Rollback on error
-        setTransactions(previousTransactions);
-        toast({
-          title: 'Erro ao excluir transações',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return 0;
-      }
-
-      const label = filter === 'all' 
-        ? 'Todas as transações excluídas' 
-        : filter === 'income' 
-          ? 'Todas as receitas excluídas' 
-          : 'Todas as despesas excluídas';
-      
-      toast({ title: `🗑️ ${label}! (${count})` });
-      return count;
-    } catch (err) {
+    if (error) {
       setTransactions(previousTransactions);
-      toast({
-        title: 'Erro ao excluir transações',
-        description: 'Falha de rede. Tente novamente.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao excluir transações', description: error, variant: 'destructive' });
       return 0;
     }
+
+    const label = filter === 'all' ? 'Todas as transações excluídas' : filter === 'income' ? 'Todas as receitas excluídas' : 'Todas as despesas excluídas';
+    toast({ title: `🗑️ ${label}! (${count})` });
+    return count;
   }, [user, toast, transactions]);
 
   // Initial fetch
@@ -455,7 +244,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Realtime subscription with debounced silent refresh
+  // Realtime subscription
   useEffect(() => {
     if (!user) return;
 
@@ -463,22 +252,15 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
     const channel = supabase
       .channel('transactions-realtime-provider')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'transactions',
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          // Debounce realtime events to avoid rapid refetches
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => {
-            fetchTransactions(true); // Silent refresh
-          }, 500);
-        }
-      )
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+        filter: `user_id=eq.${user.id}`,
+      }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchTransactions(true), 500);
+      })
       .subscribe();
 
     return () => {
@@ -497,11 +279,11 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     loadError,
     filters,
     setFilters,
-    addTransaction,
-    addMultipleTransactions,
-    updateTransaction,
-    deleteTransaction,
-    deleteAllTransactions,
+    addTransaction: handleAddTransaction,
+    addMultipleTransactions: handleAddMultiple,
+    updateTransaction: handleUpdate,
+    deleteTransaction: handleDelete,
+    deleteAllTransactions: handleDeleteAll,
     refetch: () => fetchTransactions(false),
   };
 

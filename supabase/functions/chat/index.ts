@@ -6,10 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Input validation constants
-const MAX_MESSAGE_LENGTH = 10000; // 10KB per message
-const MAX_MESSAGES = 50; // Limit conversation history
-const MAX_CONTEXT_SIZE = 10000; // Context data size
+const MAX_MESSAGE_LENGTH = 10000;
+const MAX_MESSAGES = 50;
+const MAX_CONTEXT_SIZE = 10000;
 
 const SYSTEM_PROMPT = `Você é o FinBot, um assistente financeiro pessoal amigável e prestativo. Você ajuda usuários brasileiros a gerenciar suas finanças.
 
@@ -68,10 +67,6 @@ Usuário: "Zerar meu saldo" ou "Apagar tudo" ou "Limpar todas as transações"
 ✅ Resposta: "Vou excluir todas as suas transações para zerar o saldo. Confirma?"
 <!--ACTION:{"action":"delete_all_transactions","filter":"all"}-->
 
-Usuário: "Remover todas as despesas"
-✅ Resposta: "Entendido! Vou excluir todas as suas despesas."
-<!--ACTION:{"action":"delete_all_transactions","filter":"expense"}-->
-
 ## REGRAS ADICIONAIS:
 - Sempre responda em português brasileiro
 - Para valores, interprete como BRL (R$)
@@ -79,64 +74,51 @@ Usuário: "Remover todas as despesas"
 - Se a categoria não for clara, pergunte ao usuário
 - Se o usuário pedir para excluir algo, identifique a transação mais provável no contexto`;
 
-// Safe error mapping - never expose internal details
-const getSafeErrorMessage = (error: unknown): string => {
-  console.error("Chat error:", error);
-  
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    if (msg.includes("api_key") || msg.includes("configured")) {
-      return "Configuração de serviço incompleta";
-    }
-  }
-  return "Erro ao processar sua mensagem";
-};
-
-// Verify JWT and return user ID
-const verifyAuth = async (req: Request): Promise<{ userId: string } | { error: Response }> => {
+function verifyAuth(req: Request): { token: string } | { error: Response } {
   const authHeader = req.headers.get("Authorization");
-  
+
   if (!authHeader?.startsWith("Bearer ")) {
     return {
       error: new Response(
         JSON.stringify({ error: "Não autorizado" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+      ),
     };
   }
 
+  return { token: authHeader.replace("Bearer ", "") };
+}
+
+async function getAuthenticatedUserId(token: string): Promise<{ userId: string } | { error: Response }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  
+
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Supabase configuration missing");
     return {
       error: new Response(
         JSON.stringify({ error: "Configuração de serviço incompleta" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+      ),
     };
   }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } }
+    global: { headers: { Authorization: `Bearer ${token}` } },
   });
 
-  const token = authHeader.replace("Bearer ", "");
   const { data, error } = await supabase.auth.getUser(token);
-  
+
   if (error || !data?.user) {
-    console.error("Auth verification failed:", error?.message);
     return {
       error: new Response(
         JSON.stringify({ error: "Não autorizado" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+      ),
     };
   }
 
   return { userId: data.user.id };
-};
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -144,82 +126,43 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication
-    const authResult = await verifyAuth(req);
-    if ("error" in authResult) {
-      return authResult.error;
-    }
-    
+    const authCheck = verifyAuth(req);
+    if ("error" in authCheck) return authCheck.error;
+
+    const authResult = await getAuthenticatedUserId(authCheck.token);
+    if ("error" in authResult) return authResult.error;
+
     const { messages, context } = await req.json();
-    
-    // Validate messages input
+
     if (!messages || !Array.isArray(messages)) {
-      return new Response(
-        JSON.stringify({ error: "Mensagens inválidas" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Mensagens inválidas" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (messages.length > MAX_MESSAGES) {
-      return new Response(
-        JSON.stringify({ error: "Muitas mensagens no histórico" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Muitas mensagens no histórico" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Validate each message
     for (const msg of messages) {
-      if (!msg || typeof msg !== 'object' || !msg.role || !msg.content) {
-        return new Response(
-          JSON.stringify({ error: "Formato de mensagem inválido" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      if (typeof msg.content !== 'string' || msg.content.length > MAX_MESSAGE_LENGTH) {
-        return new Response(
-          JSON.stringify({ error: "Mensagem muito longa" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      if (!['user', 'assistant', 'system'].includes(msg.role)) {
-        return new Response(
-          JSON.stringify({ error: "Role de mensagem inválido" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (!msg?.role || !msg?.content || typeof msg.content !== 'string' || msg.content.length > MAX_MESSAGE_LENGTH || !['user', 'assistant', 'system'].includes(msg.role)) {
+        return new Response(JSON.stringify({ error: "Formato de mensagem inválido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
-    // Validate context size if provided
-    if (context) {
-      const contextStr = JSON.stringify(context);
-      if (contextStr.length > MAX_CONTEXT_SIZE) {
-        return new Response(
-          JSON.stringify({ error: "Dados de contexto muito grandes" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    if (context && JSON.stringify(context).length > MAX_CONTEXT_SIZE) {
+      return new Response(JSON.stringify({ error: "Dados de contexto muito grandes" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
     if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
-      return new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Build context with user's financial data
     let contextMessage = `\n\n## DADOS FINANCEIROS DO USUÁRIO:
 - Saldo atual: R$ ${context?.balance?.toFixed(2) || '0.00'}
 - Total de receitas: R$ ${context?.income?.toFixed(2) || '0.00'}
 - Total de despesas: R$ ${context?.expenses?.toFixed(2) || '0.00'}
 - Data de hoje: ${new Date().toISOString().split('T')[0]}`;
 
-    // Add recent transactions to context
     if (context?.recentTransactions && Array.isArray(context.recentTransactions)) {
       contextMessage += `\n\n## TRANSAÇÕES RECENTES (para referência em exclusões):`;
       for (const tx of context.recentTransactions.slice(0, 10)) {
@@ -246,31 +189,19 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione mais créditos na sua conta." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione mais créditos na sua conta." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      console.error("AI gateway error:", response.status);
-      return new Response(JSON.stringify({ error: "Erro ao processar sua mensagem" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Erro ao processar sua mensagem" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: getSafeErrorMessage(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("Chat error:", e);
+    return new Response(JSON.stringify({ error: "Erro ao processar sua mensagem" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

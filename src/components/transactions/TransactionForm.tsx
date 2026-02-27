@@ -9,6 +9,7 @@ import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, formatCurrency } from '@/lib/con
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus } from 'lucide-react';
 import { getLocalISODate } from '@/lib/dateUtils';
+import { normalizeAmount } from '@/lib/transactionNormalization';
 
 export function TransactionForm() {
   const [type, setType] = useState<'income' | 'expense'>('expense');
@@ -26,9 +27,9 @@ export function TransactionForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const numAmount = parseFloat(amount.replace(',', '.'));
-    if (isNaN(numAmount) || numAmount <= 0) {
-      toast({ title: 'Valor inválido', variant: 'destructive' });
+    const numAmount = normalizeAmount(amount);
+    if (numAmount === null || numAmount <= 0) {
+      toast({ title: 'Valor inválido', description: 'Digite um valor numérico maior que zero', variant: 'destructive' });
       return;
     }
 
@@ -61,79 +62,36 @@ export function TransactionForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Type Toggle */}
           <div className="flex gap-2">
-            <Button
-              type="button"
-              variant={type === 'expense' ? 'default' : 'outline'}
-              onClick={() => { setType('expense'); setCategory(''); }}
-              className="flex-1"
-            >
-              Despesa
-            </Button>
-            <Button
-              type="button"
-              variant={type === 'income' ? 'default' : 'outline'}
-              onClick={() => { setType('income'); setCategory(''); }}
-              className="flex-1"
-            >
-              Receita
-            </Button>
+            <Button type="button" variant={type === 'expense' ? 'default' : 'outline'} onClick={() => { setType('expense'); setCategory(''); }} className="flex-1">Despesa</Button>
+            <Button type="button" variant={type === 'income' ? 'default' : 'outline'} onClick={() => { setType('income'); setCategory(''); }} className="flex-1">Receita</Button>
           </div>
 
-          {/* Amount */}
           <div className="space-y-2">
             <Label htmlFor="amount">Valor (R$)</Label>
-            <Input
-              id="amount"
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required
-            />
+            <Input id="amount" type="text" inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </div>
 
-          {/* Category */}
           <div className="space-y-2">
             <Label>Categoria</Label>
             <Select value={category} onValueChange={setCategory} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
                 {categories.map((cat) => (
-                  <SelectItem key={cat.value} value={cat.value}>
-                    {cat.icon} {cat.label}
-                  </SelectItem>
+                  <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Date */}
           <div className="space-y-2">
             <Label htmlFor="date">Data</Label>
-            <Input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-            />
+            <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </div>
 
-          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Descrição (opcional)</Label>
-            <Input
-              id="description"
-              type="text"
-              placeholder="Ex: Almoço no restaurante"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <Input id="description" type="text" placeholder="Ex: Almoço no restaurante" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
           <Button type="submit" className="w-full" disabled={loading || !category}>
