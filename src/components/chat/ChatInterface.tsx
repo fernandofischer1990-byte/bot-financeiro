@@ -1,15 +1,15 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useChatMessages, ChatMessage } from '@/hooks/useChatMessages';
+import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, User, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Send, Loader2, Bot, Trash2 } from 'lucide-react';
 import { formatCurrency, getCategoryLabel } from '@/lib/constants';
-import { supabase } from '@/integrations/supabase/client';
 import { extractAction } from '@/lib/actionParser';
+import { sendChatMessage, readSSEStream } from '@/services/chatService';
+import { MessageBubble } from './MessageBubble';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,8 +21,19 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+const CHAT_TIMEOUT_MS = 60000;
+
+function cleanContentForDisplay(content: string): string {
+  return content
+    .replace(/<!--ACTION:[\s\S]*?-->/g, '')
+    .replace(/\{[\s\S]*?"action"[\s\S]*?\}/g, '')
+    .replace(/```json[\s\S]*?```/g, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .trim();
+}
+
 export function ChatInterface() {
-  const { overallMetrics: metrics, transactions, deleteTransaction } = useTransactionsContext();
+  const { overallMetrics: metrics, transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -30,13 +41,9 @@ export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const { messages, addMessage, clearHistory } = useChatMessages();
-  const { addTransaction, deleteAllTransactions } = useTransactionsContext();
   const { toast } = useToast();
 
-  const CHAT_TIMEOUT_MS = 60000; // 60 seconds
-
-  // Memoize recent transactions to prevent re-renders
-  const recentTransactions = useMemo(() => 
+  const recentTransactions = useMemo(() =>
     transactions.slice(0, 10).map(t => ({
       id: t.id,
       type: t.type,
@@ -49,23 +56,15 @@ export function ChatInterface() {
   useEffect(() => {
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
     }
   }, [messages, streamingContent]);
 
-  const parseAIResponse = async (content: string) => {
+  const parseAIResponse = useCallback(async (content: string) => {
     const result = extractAction(content);
-    
     if (!result.success || !result.action) {
       if (result.error && result.error !== 'Nenhuma ação encontrada') {
-        console.warn('Action parsing failed:', result.error);
-        toast({
-          title: 'Não consegui registrar automaticamente',
-          description: 'Por favor, me diga o valor e a categoria novamente.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Não consegui registrar automaticamente', description: 'Por favor, me diga o valor e a categoria novamente.', variant: 'destructive' });
       }
       return;
     }
@@ -81,57 +80,30 @@ export function ChatInterface() {
         transaction_date: action.date,
         source: 'chat',
       });
-      
       if (txResult) {
-        toast({
-          title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
-          description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}`,
-        });
+        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}` });
       }
     } else if (action.action === 'delete_transaction' && action.id) {
       const success = await deleteTransaction(action.id);
-      if (success) {
-        toast({
-          title: '🗑️ Transação excluída!',
-        });
-      }
+      if (success) toast({ title: '🗑️ Transação excluída!' });
     } else if (action.action === 'delete_all_transactions') {
-      // Show confirmation dialog before mass deletion
       setPendingDeleteAll({ filter: action.filter || 'all' });
     }
-  };
+  }, [addTransaction, deleteTransaction, toast]);
 
   const handleConfirmDeleteAll = async () => {
     if (!pendingDeleteAll) return;
-    
     const count = await deleteAllTransactions(pendingDeleteAll.filter);
     setPendingDeleteAll(null);
-    
     if (count > 0) {
-      const label = pendingDeleteAll.filter === 'all' 
-        ? `todas as ${count} transações` 
-        : pendingDeleteAll.filter === 'income' 
-          ? `todas as ${count} receitas` 
-          : `todas as ${count} despesas`;
-      
+      const label = pendingDeleteAll.filter === 'all' ? `todas as ${count} transações` : pendingDeleteAll.filter === 'income' ? `todas as ${count} receitas` : `todas as ${count} despesas`;
       await addMessage('assistant', `Pronto! Excluí ${label} conforme solicitado. ✅`);
     }
   };
 
-  const cleanContentForDisplay = (content: string): string => {
-    return content
-      .replace(/<!--ACTION:[\s\S]*?-->/g, '')
-      .replace(/\{[\s\S]*?"action"[\s\S]*?\}/g, '')
-      .replace(/```json[\s\S]*?```/g, '')
-      .replace(/```[\s\S]*?```/g, '')
-      .trim();
-  };
-
   const cancelStreaming = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     setIsStreaming(false);
     setStreamingContent('');
   };
@@ -141,99 +113,24 @@ export function ChatInterface() {
 
     const userMessage = input.trim();
     setInput('');
-    
     await addMessage('user', userMessage);
     setIsStreaming(true);
     setStreamingContent('');
 
-    // Setup AbortController with timeout
     abortControllerRef.current = new AbortController();
-    const timeoutId = setTimeout(() => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    }, CHAT_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => abortControllerRef.current?.abort(), CHAT_TIMEOUT_MS);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Você precisa estar logado para usar o chat');
-      }
+      const response = await sendChatMessage(
+        [...messages, { role: 'user' as const, content: userMessage }],
+        { balance: metrics.totalBalance, income: metrics.totalIncome, expenses: metrics.totalExpenses, recentTransactions },
+        abortControllerRef.current.signal
+      );
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          messages: [...messages, { role: 'user', content: userMessage }].map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
-          context: {
-            balance: metrics.totalBalance,
-            income: metrics.totalIncome,
-            expenses: metrics.totalExpenses,
-            recentTransactions,
-          },
-        }),
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Erro ao enviar mensagem';
-        try {
-          const error = await response.json();
-          errorMessage = error.error || errorMessage;
-        } catch {
-          console.warn('Failed to parse error response');
-        }
-        throw new Error(errorMessage);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('Erro de conexão');
-
-      const decoder = new TextDecoder();
       let fullContent = '';
-      let buffer = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          
-          let newlineIndex: number;
-          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-            let line = buffer.slice(0, newlineIndex);
-            buffer = buffer.slice(newlineIndex + 1);
-
-            if (line.endsWith('\r')) line = line.slice(0, -1);
-            if (line.startsWith(':') || line.trim() === '') continue;
-            if (!line.startsWith('data: ')) continue;
-
-            const jsonStr = line.slice(6).trim();
-            if (jsonStr === '[DONE]') continue;
-
-            try {
-              const parsed = JSON.parse(jsonStr);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
-                fullContent += content;
-                setStreamingContent(cleanContentForDisplay(fullContent));
-              }
-            } catch (parseError) {
-              console.debug('JSON parse retry:', parseError);
-              buffer = line + '\n' + buffer;
-              break;
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
+      for await (const chunk of readSSEStream(response)) {
+        fullContent += chunk;
+        setStreamingContent(cleanContentForDisplay(fullContent));
       }
 
       if (fullContent) {
@@ -241,24 +138,12 @@ export function ChatInterface() {
         await parseAIResponse(fullContent);
       }
       setStreamingContent('');
-
     } catch (error) {
-      console.error('Chat error:', error);
-      
       let errorMessage = 'Falha ao enviar mensagem';
       if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          errorMessage = 'Requisição cancelada ou tempo limite excedido';
-        } else {
-          errorMessage = error.message;
-        }
+        errorMessage = error.name === 'AbortError' ? 'Requisição cancelada ou tempo limite excedido' : error.message;
       }
-      
-      toast({
-        title: 'Erro',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro', description: errorMessage, variant: 'destructive' });
       setStreamingContent('');
     } finally {
       clearTimeout(timeoutId);
@@ -319,15 +204,8 @@ export function ChatInterface() {
           ))}
 
           {streamingContent && (
-            <MessageBubble 
-              message={{ 
-                id: 'streaming', 
-                role: 'assistant', 
-                content: streamingContent,
-                user_id: '',
-                metadata: null,
-                created_at: new Date().toISOString(),
-              }} 
+            <MessageBubble
+              message={{ id: 'streaming', role: 'assistant', content: streamingContent, user_id: '', metadata: null, created_at: new Date().toISOString() }}
               cleanContent={cleanContentForDisplay}
             />
           )}
@@ -344,13 +222,7 @@ export function ChatInterface() {
       {/* Input */}
       <div className="p-4 border-t">
         <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Digite sua mensagem..."
-            disabled={isStreaming}
-            className="flex-1"
-          />
+          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Digite sua mensagem..." disabled={isStreaming} className="flex-1" />
           {isStreaming ? (
             <Button type="button" variant="destructive" size="icon" onClick={cancelStreaming} title="Cancelar">
               <span className="text-xs font-bold">✕</span>
@@ -363,7 +235,7 @@ export function ChatInterface() {
         </form>
       </div>
 
-      {/* Confirmation Dialog for Mass Deletion */}
+      {/* Confirmation Dialog */}
       <AlertDialog open={!!pendingDeleteAll} onOpenChange={(open) => !open && setPendingDeleteAll(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -383,35 +255,6 @@ export function ChatInterface() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function MessageBubble({ message, cleanContent }: { message: ChatMessage; cleanContent: (s: string) => string }) {
-  const isUser = message.role === 'user';
-  
-  const displayContent = isUser ? message.content : cleanContent(message.content);
-  
-  if (!displayContent) return null;
-  
-  return (
-    <div className={cn('flex gap-2', isUser && 'flex-row-reverse')}>
-      <div className={cn(
-        'p-2 rounded-full flex-shrink-0',
-        isUser ? 'bg-primary' : 'bg-muted'
-      )}>
-        {isUser ? (
-          <User className="h-4 w-4 text-primary-foreground" />
-        ) : (
-          <Bot className="h-4 w-4" />
-        )}
-      </div>
-      <div className={cn(
-        'max-w-[80%] rounded-2xl px-4 py-2',
-        isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
-      )}>
-        <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
-      </div>
     </div>
   );
 }

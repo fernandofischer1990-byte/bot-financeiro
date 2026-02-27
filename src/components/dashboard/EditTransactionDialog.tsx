@@ -9,22 +9,11 @@ import { Transaction } from '@/contexts/TransactionsContext';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/constants';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeAmount } from '@/lib/transactionNormalization';
 
-// Normaliza valor BR (ex: "3.326,61" → 3326.61)
-function parseAmountBR(value: string): number {
-  const normalized = value
-    .replace(/\s/g, '')      // remove espaços
-    .replace(/\./g, '')      // remove pontos (milhar)
-    .replace(',', '.');      // troca vírgula por ponto
-  return parseFloat(normalized);
-}
-
-// Formata número para exibição BR
+/** Format number for Brazilian display (e.g. 3326.61 → "3.326,61") */
 function formatAmountBR(value: number): string {
-  return value.toLocaleString('pt-BR', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  });
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 const SAVE_TIMEOUT_MS = 15000;
@@ -48,7 +37,6 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
   useEffect(() => {
     if (transaction) {
       setType(transaction.type);
-      // Formata valor para exibição brasileira (3.326,61)
       setAmount(formatAmountBR(transaction.amount));
       setCategory(transaction.category);
       setDescription(transaction.description || '');
@@ -61,48 +49,34 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
   const handleSave = async () => {
     if (!transaction) return;
     
-    // Validar valor numérico (aceita vírgula ou ponto)
-    const numAmount = parseAmountBR(amount);
-    if (!Number.isFinite(numAmount) || numAmount <= 0) {
-      toast({ 
-        title: 'Valor inválido', 
-        description: 'Digite um valor numérico maior que zero',
-        variant: 'destructive' 
-      });
+    const numAmount = normalizeAmount(amount);
+    if (numAmount === null || numAmount <= 0) {
+      toast({ title: 'Valor inválido', description: 'Digite um valor numérico maior que zero', variant: 'destructive' });
       return;
     }
     
     setSaving(true);
     try {
-      // Timeout para evitar salvamento infinito
-      const timeoutPromise = new Promise<boolean>((_, reject) => 
+      const timeoutPromise = new Promise<boolean>((_, reject) =>
         setTimeout(() => reject(new Error('Tempo limite excedido')), SAVE_TIMEOUT_MS)
       );
       
       const savePromise = onSave(transaction.id, {
-        type,
-        amount: numAmount,
-        category,
+        type, amount: numAmount, category,
         description: description || null,
         transaction_date: date,
       });
 
       const success = await Promise.race([savePromise, timeoutPromise]);
-      
-      if (success) {
-        onOpenChange(false);
-      }
+      if (success) onOpenChange(false);
     } catch (error) {
-      console.error('Erro ao salvar transação:', error);
-      toast({ 
-        title: 'Erro ao salvar', 
-        description: error instanceof Error && error.message === 'Tempo limite excedido'
-          ? 'Tempo limite excedido. Verifique sua conexão.'
-          : 'Falha ao salvar. Tente novamente.',
-        variant: 'destructive' 
+      toast({
+        title: 'Erro ao salvar',
+        description: error instanceof Error && error.message === 'Tempo limite excedido' ? 'Tempo limite excedido. Verifique sua conexão.' : 'Falha ao salvar. Tente novamente.',
+        variant: 'destructive',
       });
     } finally {
-      setSaving(false); // SEMPRE reseta o estado
+      setSaving(false);
     }
   };
 
@@ -116,13 +90,8 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="type">Tipo</Label>
-            <Select value={type} onValueChange={(v) => {
-              setType(v as 'income' | 'expense');
-              setCategory('');
-            }}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+            <Select value={type} onValueChange={(v) => { setType(v as 'income' | 'expense'); setCategory(''); }}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="income">Receita</SelectItem>
                 <SelectItem value="expense">Despesa</SelectItem>
@@ -132,27 +101,16 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
 
           <div className="grid gap-2">
             <Label htmlFor="amount">Valor (R$)</Label>
-            <Input
-              id="amount"
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0,00"
-            />
+            <Input id="amount" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="category">Categoria</Label>
             <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
                 {categories.map((cat) => (
-                  <SelectItem key={cat.value} value={cat.value}>
-                    {cat.icon} {cat.label}
-                  </SelectItem>
+                  <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -160,39 +118,19 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
 
           <div className="grid gap-2">
             <Label htmlFor="date">Data</Label>
-            <Input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+            <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="description">Descrição</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descrição opcional..."
-              rows={2}
-            />
+            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição opcional..." rows={2} />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleSave} disabled={saving || !amount || !category}>
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              'Salvar'
-            )}
+            {saving ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</>) : 'Salvar'}
           </Button>
         </DialogFooter>
       </DialogContent>
