@@ -26,7 +26,6 @@ const CHAT_TIMEOUT_MS = 60000;
 function cleanContentForDisplay(content: string): string {
   return content
     .replace(/<!--ACTION:[\s\S]*?-->/g, '')
-    .replace(/\{[\s\S]*?"action"[\s\S]*?\}/g, '')
     .replace(/```json[\s\S]*?```/g, '')
     .replace(/```[\s\S]*?```/g, '')
     .trim();
@@ -64,6 +63,7 @@ export function ChatInterface() {
     const result = extractAction(content);
     if (!result.success || !result.action) {
       if (result.error && result.error !== 'Nenhuma ação encontrada') {
+        console.error('[Chat] Action extraction failed:', result.error, '\nRaw content:', content);
         toast({ title: 'Não consegui registrar automaticamente', description: 'Por favor, me diga o valor e a categoria novamente.', variant: 'destructive' });
       }
       return;
