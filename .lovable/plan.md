@@ -1,116 +1,38 @@
 
 
-# Refatoracao Completa do FinBot
+# Fix: Chat actions not reflecting in dashboard
 
-## Diagnostico
+## Root Cause Analysis
 
-Apos analisar todos os arquivos do projeto, identifiquei os seguintes problemas:
+The user sends "gastei 80 no mercado", the AI correctly returns `<!--ACTION:{"action":"add_transaction",...}-->`, but the red toast "Nao consegui registrar automaticamente" appears and the transaction is never inserted.
 
-### Problemas de Arquitetura
-1. **TransactionsContext.tsx (521 linhas)** — arquivo monolitico que mistura: estado, logica de negocio (CRUD), metricas, filtros, realtime e toasts
-2. **ChatInterface.tsx (417 linhas)** — mistura UI, streaming SSE, parsing de acoes, logica de negocio (adicionar/excluir transacoes)
-3. **FileUpload.tsx (329 linhas)** — mistura UI, leitura de arquivos, chamada de edge function, normalizacao de dados
-4. **Duplicacao de logica de parsing de valores** — `EditTransactionDialog` tem seu proprio `parseAmountBR`, `TransactionForm` faz `parseFloat(amount.replace(',', '.'))`, e `transactionNormalization.ts` tem `normalizeAmount`. Tres implementacoes diferentes
-5. **Edge functions** duplicam o pattern de auth verification (chat e parse-statement tem codigo identico de `verifyAuth`)
-6. **Sem camada de servico** — componentes chamam `supabase` diretamente em varios lugares
+The issue is in `readSSEStream` in `src/services/chatService.ts`:
 
-### Problemas de Qualidade
-7. `ChatInterface` importa `useTransactionsContext` duas vezes (linhas 25 e 33)
-8. `cleanContentForDisplay` usa regex frágil que pode remover conteudo legitimo
-9. `useChatMessages` nao tem tratamento de timeout
-10. `suggestCategory` em `categoryMapping.ts` e importado mas pouco usado — a normalizacao ja cobre isso
+1. **Lost buffer content**: When the stream ends (`done: true`), the function breaks immediately without processing any remaining content in the buffer. If the last SSE data line doesn't end with `\n`, that content is silently discarded.
 
----
+2. **Infinite retry on parse failure**: The catch block puts the failed line back into the buffer with `break`, but on the next read cycle it tries to parse the SAME failed line again (since more data is appended AFTER the old content). If the JSON was split across TCP reads, the reassembled buffer has `old_partial\nnew_data`, but the inner while loop extracts `old_partial` again and fails again.
 
-## Plano de Implementacao
+3. **No decoder flush**: `TextDecoder` with `{ stream: true }` buffers incomplete multi-byte characters (like `ã` in "alimentação"). When the loop exits, `decoder.decode()` is never called without args to flush remaining bytes, potentially corrupting the last chunk.
 
-### Passo 1: Criar camada de servicos no frontend
+4. **Dangerous display regex**: `cleanContentForDisplay` has `\{[\s\S]*?"action"[\s\S]*?\}` which can match and remove legitimate content containing curly braces. Not the root cause but a fragility.
 
-**Novo arquivo: `src/services/transactionService.ts`**
-- Extrair toda logica de CRUD de transacoes do `TransactionsContext` para funcoes puras
-- Funcoes: `fetchUserTransactions`, `insertTransaction`, `insertMultipleTransactions`, `updateTransaction`, `deleteTransaction`, `deleteUserTransactions`
-- Cada funcao recebe `userId` e retorna `{ data, error }`
-- Centralizar o timeout pattern (usar `AbortSignal.timeout()`)
+5. **No error logging**: When `extractAction` fails, the error is shown as a toast but never logged to console, making debugging impossible.
 
-**Novo arquivo: `src/services/chatService.ts`**
-- Extrair a chamada ao edge function `chat` do `ChatInterface`
-- Funcao: `sendChatMessage(messages, context, signal)` que retorna ReadableStream
-- Centralizar headers e URL construction
+## Changes
 
-**Novo arquivo: `src/services/fileParsingService.ts`**
-- Extrair `parsePDF` do `FileUpload` para funcao: `parseStatementPDF(base64)`
-- Extrair `parseSpreadsheet` para funcao: `parseSpreadsheetFile(file)`
+### `src/services/chatService.ts` -- Fix SSE stream reader
+- Process remaining buffer after the read loop ends (when `done: true`)
+- Flush the TextDecoder after the loop to handle incomplete multi-byte characters
+- Fix the catch block: instead of putting the line back in buffer (which causes infinite retry), skip malformed lines and continue
+- Add `console.warn` for parse failures to aid debugging
 
-### Passo 2: Unificar parsing de valores numericos
+### `src/components/chat/ChatInterface.tsx` -- Fix display regex and add logging
+- Remove the dangerous greedy regex `\{[\s\S]*?"action"[\s\S]*?\}` from `cleanContentForDisplay` -- the `<!--ACTION:...-->` regex already handles action removal
+- Add `console.error` in `parseAIResponse` when extraction fails, logging the raw content for debugging
 
-**Arquivo: `src/lib/transactionNormalization.ts`**
-- Exportar `normalizeAmount` como a UNICA funcao de parsing de valores
-- Remover `parseAmountBR` do `EditTransactionDialog` — usar `normalizeAmount` no lugar
-- Remover `parseFloat(amount.replace(',', '.'))` do `TransactionForm` — usar `normalizeAmount`
+### `src/components/chat/MessageBubble.tsx` -- Fix forwardRef warning
+- The console shows "Function components cannot be given refs" warning from `MessageBubble`. Wrap with `React.forwardRef` or remove the ref attempt.
 
-### Passo 3: Refatorar TransactionsContext
-
-**Arquivo: `src/contexts/TransactionsContext.tsx`**
-- Manter apenas: estado, dispatch de acoes, calculo de metricas, realtime subscription
-- Delegar CRUD para `transactionService.ts`
-- Extrair `calculateMetrics` para `src/lib/metricsCalculator.ts`
-- Reduzir de ~520 linhas para ~250 linhas
-
-### Passo 4: Refatorar ChatInterface
-
-**Arquivo: `src/components/chat/ChatInterface.tsx`**
-- Extrair logica de streaming SSE para hook `src/hooks/useChatStream.ts`
-- Extrair `parseAIResponse` para o hook — manter componente puramente visual
-- Extrair `MessageBubble` para `src/components/chat/MessageBubble.tsx`
-- Remover import duplicado de `useTransactionsContext`
-- Reduzir de ~417 linhas para ~150 linhas
-
-### Passo 5: Refatorar FileUpload
-
-**Arquivo: `src/components/transactions/FileUpload.tsx`**
-- Delegar parsing para `fileParsingService.ts`
-- Manter apenas: UI de upload, preview state, botoes de acao
-- Reduzir de ~329 linhas para ~150 linhas
-
-### Passo 6: Limpeza e higienizacao
-
-- Remover `console.debug` e `console.warn` desnecessarios
-- Remover import nao usado de `suggestCategory` em `FileUpload.tsx` (linha 10)
-- Padronizar nomes: todos os servicos em ingles, UI labels em portugues
-- Remover codigo morto
-
-### Passo 7: Backend — Unificar auth verification nas edge functions
-
-**Novo arquivo: `supabase/functions/_shared/auth.ts`**
-- Extrair `verifyAuth` e `corsHeaders` compartilhados
-- Importar em `chat/index.ts` e `parse-statement/index.ts`
-
-> Nota: Edge functions nao suportam subpastas de codigo compartilhado via import de `_shared/` diretamente no deploy do Lovable Cloud. A alternativa e duplicar o codigo de auth mas padroniza-lo (manter identico). Vou manter inline mas padronizado.
-
-### Passo 8: Melhorar performance do dashboard
-
-- No `calculateMetrics`, os calculos ja sao O(n) e memoizados — nao ha gargalo real
-- A query `select('*')` retorna todas as colunas; otimizar para `select('id,type,amount,category,description,transaction_date,source,created_at,updated_at')`
-- Adicionar `limit(1000)` explicito para deixar claro o limite
-
----
-
-## Resumo de Arquivos
-
-| Acao | Arquivo | Motivo |
-|------|---------|--------|
-| Criar | `src/services/transactionService.ts` | Camada de servico para CRUD |
-| Criar | `src/services/chatService.ts` | Chamada ao chat edge function |
-| Criar | `src/services/fileParsingService.ts` | Parsing de arquivos |
-| Criar | `src/lib/metricsCalculator.ts` | Calculo de metricas extraido |
-| Criar | `src/hooks/useChatStream.ts` | Logica de streaming SSE |
-| Criar | `src/components/chat/MessageBubble.tsx` | Componente de bolha de mensagem |
-| Editar | `src/contexts/TransactionsContext.tsx` | Delegar para servicos |
-| Editar | `src/components/chat/ChatInterface.tsx` | Usar hooks e servicos |
-| Editar | `src/components/transactions/FileUpload.tsx` | Usar servicos |
-| Editar | `src/components/transactions/TransactionForm.tsx` | Usar `normalizeAmount` |
-| Editar | `src/components/dashboard/EditTransactionDialog.tsx` | Usar `normalizeAmount` |
-| Editar | `src/lib/transactionNormalization.ts` | Exportar `formatAmountBR` |
-
-Total: 6 novos arquivos, 6 arquivos editados. Nenhuma alteracao no banco de dados.
+## Summary
+3 files edited. No database changes. The core fix is making `readSSEStream` properly handle buffer remainder and TCP chunk boundaries so that `fullContent` always contains the complete AI response including the ACTION tag.
 
