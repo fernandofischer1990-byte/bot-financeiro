@@ -70,36 +70,48 @@ export async function* readSSEStream(response: Response): AsyncGenerator<string>
   const decoder = new TextDecoder();
   let buffer = '';
 
+  function* processBuffer(): Generator<string> {
+    let newlineIndex: number;
+    while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+      let line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+
+      if (line.endsWith('\r')) line = line.slice(0, -1);
+      if (line.startsWith(':') || line.trim() === '') continue;
+      if (!line.startsWith('data: ')) continue;
+
+      const jsonStr = line.slice(6).trim();
+      if (jsonStr === '[DONE]') continue;
+
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) {
+          yield content;
+        }
+      } catch (e) {
+        console.warn('[SSE] Skipping malformed JSON chunk:', jsonStr.slice(0, 100), e);
+        // Skip malformed line instead of retrying infinitely
+      }
+    }
+  }
+
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
+      yield* processBuffer();
+    }
 
-      let newlineIndex: number;
-      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-        let line = buffer.slice(0, newlineIndex);
-        buffer = buffer.slice(newlineIndex + 1);
+    // Flush remaining bytes from TextDecoder
+    buffer += decoder.decode();
 
-        if (line.endsWith('\r')) line = line.slice(0, -1);
-        if (line.startsWith(':') || line.trim() === '') continue;
-        if (!line.startsWith('data: ')) continue;
-
-        const jsonStr = line.slice(6).trim();
-        if (jsonStr === '[DONE]') continue;
-
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) {
-            yield content;
-          }
-        } catch {
-          buffer = line + '\n' + buffer;
-          break;
-        }
-      }
+    // Process any remaining complete lines in the buffer
+    if (buffer.trim()) {
+      buffer += '\n'; // Ensure last line gets processed
+      yield* processBuffer();
     }
   } finally {
     reader.releaseLock();
