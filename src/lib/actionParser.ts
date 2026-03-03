@@ -128,11 +128,5 @@ export function extractAction(content: string): ParseResult {
     return parseAction(actionMatch[1]);
   }
   
-  // Fallback: raw JSON with "action" property
-  const jsonMatch = content.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
-  if (jsonMatch) {
-    return parseAction(jsonMatch[0]);
-  }
-  
   return { success: false, error: 'Nenhuma ação encontrada' };
 }
