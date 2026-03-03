@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { FilterState } from '@/components/dashboard/DashboardFilters';
@@ -170,35 +169,53 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const handleAddMultiple = useCallback(async (inputs: TransactionInput[]): Promise<number> => {
     if (!user || inputs.length === 0) return 0;
 
-    const { data, error } = await insertMultipleTransactions(user.id, inputs);
+    try {
+      const { data, error } = await insertMultipleTransactions(user.id, inputs);
 
-    if (error) {
-      toast({ title: 'Erro ao importar transações', description: error, variant: 'destructive' });
+      if (error) {
+        toast({ title: 'Erro ao importar transações', description: error, variant: 'destructive' });
+        return 0;
+      }
+
+      if (data.length > 0) {
+        setTransactions(prev => sortByDateDesc([...data, ...prev]));
+      }
+
+      return data.length;
+    } catch (e) {
+      console.error('[TransactionsContext] handleAddMultiple error:', e);
+      toast({ title: 'Erro ao importar transações', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
       return 0;
     }
-
-    if (data.length > 0) {
-      setTransactions(prev => sortByDateDesc([...data, ...prev]));
-    }
-
-    return data.length;
   }, [user, toast]);
 
   const handleUpdate = useCallback(async (id: string, updates: Partial<Transaction>): Promise<boolean> => {
     if (!user) return false;
 
-    const { error } = await updateTransactionById(user.id, id, updates);
+    const now = new Date().toISOString();
+    let rollback: Transaction[] | null = null;
+    setTransactions(prev => {
+      rollback = prev;
+      return prev.map(tx => tx.id === id ? { ...tx, ...updates, updated_at: now } : tx);
+    });
 
-    if (error) {
-      toast({ title: 'Erro ao atualizar transação', description: error, variant: 'destructive' });
+    try {
+      const { error } = await updateTransactionById(user.id, id, updates);
+
+      if (error) {
+        if (rollback) setTransactions(rollback);
+        toast({ title: 'Erro ao atualizar transação', description: error, variant: 'destructive' });
+        return false;
+      }
+
+      toast({ title: '✅ Transação atualizada!' });
+      return true;
+    } catch (e) {
+      console.error('[TransactionsContext] handleUpdate error:', e);
+      if (rollback) setTransactions(rollback);
+      toast({ title: 'Erro ao atualizar transação', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
       return false;
     }
-
-    setTransactions(prev => prev.map(tx =>
-      tx.id === id ? { ...tx, ...updates, updated_at: new Date().toISOString() } : tx
-    ));
-    toast({ title: '✅ Transação atualizada!' });
-    return true;
   }, [user, toast]);
 
   const handleDelete = useCallback(async (id: string): Promise<boolean> => {
@@ -258,30 +275,6 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Realtime subscription
-  useEffect(() => {
-    if (!user) return;
-
-    let debounceTimer: NodeJS.Timeout | null = null;
-
-    const channel = supabase
-      .channel('transactions-realtime-provider')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'transactions',
-        filter: `user_id=eq.${user.id}`,
-      }, () => {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchTransactions(true), 500);
-      })
-      .subscribe();
-
-    return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      supabase.removeChannel(channel);
-    };
-  }, [user, fetchTransactions]);
 
   const value: TransactionsContextValue = {
     transactions,
