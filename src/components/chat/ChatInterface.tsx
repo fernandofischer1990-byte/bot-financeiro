@@ -72,16 +72,21 @@ export function ChatInterface() {
     const action = result.action;
 
     if (action.action === 'add_transaction' && action.type && action.amount && action.category) {
-      const txResult = await addTransaction({
-        type: action.type,
-        amount: action.amount,
-        category: action.category,
-        description: action.description || '',
-        transaction_date: action.date,
-        source: 'chat',
-      });
-      if (txResult) {
-        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}` });
+      try {
+        const txResult = await addTransaction({
+          type: action.type,
+          amount: action.amount,
+          category: action.category,
+          description: action.description || '',
+          transaction_date: action.date,
+          source: 'chat',
+        });
+        if (txResult) {
+          toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}` });
+        }
+      } catch (e) {
+        console.error('[Chat] addTransaction failed:', e);
+        toast({ title: 'Erro ao registrar transação', description: 'Tente novamente.', variant: 'destructive' });
       }
     } else if (action.action === 'delete_transaction' && action.id) {
       const success = await deleteTransaction(action.id);

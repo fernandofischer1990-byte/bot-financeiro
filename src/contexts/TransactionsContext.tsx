@@ -65,7 +65,7 @@ interface TransactionsContextValue {
 const TransactionsContext = createContext<TransactionsContextValue | null>(null);
 
 function sortByDateDesc(txs: Transaction[]): Transaction[] {
-  return txs.sort((a, b) =>
+  return [...txs].sort((a, b) =>
     b.transaction_date.localeCompare(a.transaction_date) ||
     b.created_at.localeCompare(a.created_at)
   );
@@ -150,15 +150,21 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const handleAddTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
     if (!user) return null;
 
-    const { data, error } = await insertTransaction(user.id, input);
+    try {
+      const { data, error } = await insertTransaction(user.id, input);
 
-    if (error || !data) {
-      toast({ title: 'Erro ao adicionar transação', description: error || 'Erro desconhecido', variant: 'destructive' });
+      if (error || !data) {
+        toast({ title: 'Erro ao adicionar transação', description: error || 'Erro desconhecido', variant: 'destructive' });
+        return null;
+      }
+
+      setTransactions(prev => sortByDateDesc([data, ...prev]));
+      return data;
+    } catch (e) {
+      console.error('[TransactionsContext] handleAddTransaction error:', e);
+      toast({ title: 'Erro ao adicionar transação', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
       return null;
     }
-
-    setTransactions(prev => sortByDateDesc([data, ...prev]));
-    return data;
   }, [user, toast]);
 
   const handleAddMultiple = useCallback(async (inputs: TransactionInput[]): Promise<number> => {
@@ -198,38 +204,46 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const handleDelete = useCallback(async (id: string): Promise<boolean> => {
     if (!user) return false;
 
-    const previousTransactions = transactions;
-    setTransactions(prev => prev.filter(tx => tx.id !== id));
+    let rollback: Transaction[] | null = null;
+    setTransactions(prev => {
+      rollback = prev;
+      return prev.filter(tx => tx.id !== id);
+    });
 
     const { error } = await deleteTransactionById(user.id, id);
 
     if (error) {
-      setTransactions(previousTransactions);
+      if (rollback) setTransactions(rollback);
       toast({ title: 'Erro ao excluir transação', description: error, variant: 'destructive' });
       return false;
     }
 
     toast({ title: '🗑️ Transação excluída!' });
     return true;
-  }, [user, toast, transactions]);
+  }, [user, toast]);
 
   const handleDeleteAll = useCallback(async (filter: 'all' | 'income' | 'expense' = 'all'): Promise<number> => {
     if (!user) return 0;
 
-    const toDelete = filter === 'all' ? transactions : transactions.filter(tx => tx.type === filter);
-    const count = toDelete.length;
+    let rollback: Transaction[] | null = null;
+    let count = 0;
+    setTransactions(prev => {
+      rollback = prev;
+      const toDelete = filter === 'all' ? prev : prev.filter(tx => tx.type === filter);
+      count = toDelete.length;
+      if (count === 0) return prev;
+      return filter === 'all' ? [] : prev.filter(tx => tx.type !== filter);
+    });
+
     if (count === 0) {
       toast({ title: 'Nenhuma transação para excluir' });
       return 0;
     }
 
-    const previousTransactions = transactions;
-    setTransactions(prev => filter === 'all' ? [] : prev.filter(tx => tx.type !== filter));
-
     const { error } = await deleteUserTransactions(user.id, filter);
 
     if (error) {
-      setTransactions(previousTransactions);
+      if (rollback) setTransactions(rollback);
       toast({ title: 'Erro ao excluir transações', description: error, variant: 'destructive' });
       return 0;
     }
@@ -237,7 +251,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     const label = filter === 'all' ? 'Todas as transações excluídas' : filter === 'income' ? 'Todas as receitas excluídas' : 'Todas as despesas excluídas';
     toast({ title: `🗑️ ${label}! (${count})` });
     return count;
-  }, [user, toast, transactions]);
+  }, [user, toast]);
 
   // Initial fetch
   useEffect(() => {
