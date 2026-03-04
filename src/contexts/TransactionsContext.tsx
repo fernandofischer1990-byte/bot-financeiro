@@ -71,7 +71,7 @@ function sortByDateDesc(txs: Transaction[]): Transaction[] {
 }
 
 export function TransactionsProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
@@ -111,8 +111,9 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const overallMetrics = useMemo(() => calculateMetrics(transactions), [transactions]);
 
   const fetchTransactions = useCallback(async (silent = false) => {
+    if (authLoading) return; // auth not ready yet — do nothing
     if (!user) {
-      setTransactions([]);
+      setTransactions([]);  // user definitively logged out
       setInitialLoading(false);
       setLoadError(null);
       return;
@@ -135,16 +136,18 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       if (!silent) {
         toastRef.current({ title: 'Erro ao carregar transações', description: error, variant: 'destructive' });
       }
-    } else {
+    } else if (data) {
       setTransactions(data);
       setLoadError(null);
       hasLoadedOnce.current = true;
+    } else {
+      console.warn('[TransactionsContext] fetchTransactions returned empty data unexpectedly');
     }
 
     fetchingRef.current = false;
     setInitialLoading(false);
     setRefreshing(false);
-  }, [user]);
+  }, [user, authLoading]);
 
   const handleAddTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
     if (!user) return null;
@@ -270,10 +273,12 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     return count;
   }, [user, toast]);
 
-  // Initial fetch
+  // Initial fetch — only after auth is resolved
   useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+    if (!authLoading) {
+      fetchTransactions();
+    }
+  }, [authLoading, fetchTransactions]);
 
 
   const value: TransactionsContextValue = {
