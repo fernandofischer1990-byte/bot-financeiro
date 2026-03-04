@@ -1,67 +1,37 @@
 
 
-# Fix: Auth Race Condition on Dashboard Load
+# Fix: Dashboard Rendering Premature Zero Values
 
-## Root Cause
+## Problem
 
-In `TransactionsContext.tsx` line 113-119, `fetchTransactions` clears state when `user` is null:
+The Dashboard uses `initialLoading` as its sole gate. But `initialLoading` is set to `false` in `fetchTransactions` even when `hasLoadedOnce` is still `false` — for example, when `user` is null during auth hydration, or when data comes back as `null` unexpectedly. This means the Dashboard can render metrics from an empty `transactions` array before real data arrives.
 
-```typescript
-if (!user) {
-  setTransactions([]);  // <-- clears everything
-  setInitialLoading(false);
-  return;
-}
-```
+The `hasLoadedOnce` ref already exists in `TransactionsContext` but is never exposed. The Dashboard has no way to distinguish "still loading first time" from "loaded but empty."
 
-During page refresh, `useAuth()` starts with `loading: true` and `user: null`. The `useEffect` on line 274 calls `fetchTransactions()` immediately (since `fetchTransactions` depends on `user` via `useCallback`). At this point `user` is still null (auth hydrating), so transactions get cleared to `[]` and `initialLoading` is set to `false`. The dashboard renders with zero values.
+## Fix (2 files)
 
-When auth finishes and `user` becomes available, `fetchTransactions` is recreated, the `useEffect` fires again, and transactions load — but there's a visible flash of empty state.
+### 1. `src/contexts/TransactionsContext.tsx`
 
-Note: `Index.tsx` gates `AuthenticatedApp` behind `authLoading`, but `TransactionsProvider` wraps the entire app (including the loading spinner), so its effects run during auth hydration.
+- Convert `hasLoadedOnce` from `useRef` to `useState` so it triggers re-renders
+- Add it to the context interface and expose it in the provider value
+- Ensure `initialLoading` stays `true` until `hasLoadedOnce` becomes `true` (i.e., don't set `initialLoading = false` in the `!user` early return if auth just resolved and there's no user — that's fine, but the key is the `hasLoadedOnce` flag)
 
-## Fix (1 file)
+### 2. `src/components/dashboard/Dashboard.tsx`
 
-### `src/contexts/TransactionsContext.tsx`
+Replace the simple `if (loading)` check with a three-state rendering logic:
 
-1. Import `loading` from `useAuth()` alongside `user`
-2. In `fetchTransactions`: instead of clearing state when `user` is null, check if auth is still loading. If loading, do nothing (preserve existing state). Only clear when auth is resolved and user is definitively null (logged out).
-3. Gate the initial fetch `useEffect` to only run when `!loading && user`:
+- `loading === true` (or `!isReady`) → show skeletons
+- `loadError` present → show error UI with retry
+- Data loaded, `transactions.length === 0` → show empty state message
+- Otherwise → render metrics and charts
 
-```typescript
-const { user, loading: authLoading } = useAuth();
+Add `isReady` prop (mapped from `hasLoadedOnce` in Index.tsx) and update `src/pages/Index.tsx` to pass it.
 
-const fetchTransactions = useCallback(async (silent = false) => {
-    if (authLoading) return;          // auth not ready yet — do nothing
-    if (!user) {
-      setTransactions([]);            // user definitively logged out
-      setInitialLoading(false);
-      setLoadError(null);
-      return;
-    }
-    // ... rest unchanged
-}, [user, authLoading]);
+### 3. `src/pages/Index.tsx`
 
-useEffect(() => {
-    if (!authLoading) {
-      fetchTransactions();
-    }
-}, [authLoading, fetchTransactions]);
-```
-
-Also add a defensive check in `fetchTransactions` to not overwrite state with empty array on unexpected null data:
-
-```typescript
-if (data) {
-  setTransactions(data);
-} else {
-  console.warn('[TransactionsContext] fetchTransactions returned empty data unexpectedly');
-}
-```
-
-No changes needed to Dashboard, ChatInterface, or actionParser. The Dashboard already respects `initialLoading` and shows skeletons. The chat flow is already correct from prior fixes.
+Pass `isReady={!initialLoading && hasLoadedOnce}` (or equivalent) to Dashboard. Since we'll expose `hasLoadedOnce` from context, the Dashboard `loading` prop becomes: `initialLoading || !hasLoadedOnce`.
 
 ## Summary
 
-1 file edited. No database changes. The fix ensures `fetchTransactions` never runs during auth hydration, preventing the flash of empty state on refresh.
+3 files changed. No database changes. The fix ensures the Dashboard never renders metrics until the first successful fetch completes.
 
