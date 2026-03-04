@@ -49,6 +49,7 @@ interface TransactionsContextValue {
   metrics: TransactionMetrics;
   overallMetrics: TransactionMetrics;
   initialLoading: boolean;
+  hasLoadedOnce: boolean;
   refreshing: boolean;
   loadError: string | null;
   filters: FilterState;
@@ -79,7 +80,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const hasLoadedOnce = useRef(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const fetchingRef = useRef(false);
   const [filters, setFilters] = useState<FilterState>({
     period: 'all',
@@ -122,7 +123,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
-    if (!hasLoadedOnce.current) {
+    if (!hasLoadedOnce) {
       setInitialLoading(true);
       setLoadError(null);
     } else if (!silent) {
@@ -139,7 +140,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     } else if (data) {
       setTransactions(data);
       setLoadError(null);
-      hasLoadedOnce.current = true;
+      setHasLoadedOnce(true);
     } else {
       console.warn('[TransactionsContext] fetchTransactions returned empty data unexpectedly');
     }
@@ -287,6 +288,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     metrics,
     overallMetrics,
     initialLoading,
+    hasLoadedOnce,
     refreshing,
     loadError,
     filters,

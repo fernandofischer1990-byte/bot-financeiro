@@ -32,6 +32,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
     filteredTransactions,
     metrics, 
     initialLoading,
+    hasLoadedOnce,
     loadError,
     filters,
     setFilters,
@@ -84,7 +85,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
             <Dashboard
               metrics={metrics}
               transactions={filteredTransactions}
-              loading={initialLoading}
+              loading={initialLoading || !hasLoadedOnce}
               loadError={loadError}
               filters={filters}
               onFiltersChange={setFilters}

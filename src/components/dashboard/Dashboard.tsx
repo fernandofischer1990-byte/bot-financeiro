@@ -38,8 +38,7 @@ export function Dashboard({
   if (loading) {
     return (
       <div className="space-y-6">
-        {/* Mostrar erro com opção de retry se houver problema no carregamento */}
-        {loadError && (
+        {loadError ? (
           <div className="flex flex-col items-center justify-center p-6 bg-destructive/10 border border-destructive/20 rounded-xl text-center">
             <AlertCircle className="h-8 w-8 text-destructive mb-3" />
             <p className="text-destructive font-medium mb-1">Não foi possível carregar suas transações</p>
@@ -54,8 +53,7 @@ export function Dashboard({
               </Button>
             </div>
           </div>
-        )}
-        {!loadError && (
+        ) : (
           <>
             <Skeleton className="h-[60px] rounded-xl" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -70,6 +68,16 @@ export function Dashboard({
             <Skeleton className="h-[450px] rounded-xl" />
           </>
         )}
+      </div>
+    );
+  }
+
+  if (transactions.length === 0 && !loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center">
+        <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Nenhuma transação encontrada</h3>
+        <p className="text-sm text-muted-foreground">Adicione transações manualmente ou importe um extrato para começar.</p>
       </div>
     );
   }
