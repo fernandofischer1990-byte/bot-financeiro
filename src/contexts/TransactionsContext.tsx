@@ -137,12 +137,10 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       if (!silent) {
         toastRef.current({ title: 'Erro ao carregar transações', description: error, variant: 'destructive' });
       }
-    } else if (data) {
-      setTransactions(data);
+    } else if (data !== null) {
+      setTransactions(sortByDateDesc(data));
       setLoadError(null);
       setHasLoadedOnce(true);
-    } else {
-      console.warn('[TransactionsContext] fetchTransactions returned empty data unexpectedly');
     }
 
     fetchingRef.current = false;

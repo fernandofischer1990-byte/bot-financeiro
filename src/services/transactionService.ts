@@ -2,8 +2,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Transaction, TransactionInput } from '@/contexts/TransactionsContext';
 import { getLocalISODate } from '@/lib/dateUtils';
 
-const FETCH_TIMEOUT_MS = 30000;
-
 function castTransaction(tx: Record<string, unknown>): Transaction {
   return {
     ...tx,
@@ -12,31 +10,31 @@ function castTransaction(tx: Record<string, unknown>): Transaction {
   } as Transaction;
 }
 
-export async function fetchUserTransactions(userId: string): Promise<{ data: Transaction[]; error: string | null }> {
-  try {
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Tempo limite excedido')), FETCH_TIMEOUT_MS)
-    );
+export async function fetchUserTransactions(userId: string): Promise<{ data: Transaction[] | null; error: string | null }> {
+  if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+    return { data: null, error: 'userId inválido' };
+  }
 
-    const fetchPromise = supabase
+  try {
+    const { data, error } = await supabase
       .from('transactions')
       .select('id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id')
       .eq('user_id', userId)
       .order('transaction_date', { ascending: false })
       .limit(1000);
 
-    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
-
     if (error) {
-      return { data: [], error: error.message || 'Erro ao carregar transações' };
+      return { data: null, error: error.message || 'Erro ao carregar transações' };
     }
 
-    return { data: (data || []).map(castTransaction), error: null };
+    if (data === null || data === undefined) {
+      return { data: null, error: 'Resposta inesperada do servidor' };
+    }
+
+    return { data: data.map(castTransaction), error: null };
   } catch (err) {
-    const msg = err instanceof Error && err.message === 'Tempo limite excedido'
-      ? 'Tempo limite excedido. Verifique sua conexão.'
-      : 'Falha de rede. Tente novamente.';
-    return { data: [], error: msg };
+    const msg = err instanceof Error ? err.message : 'Falha de rede. Tente novamente.';
+    return { data: null, error: msg };
   }
 }
 
