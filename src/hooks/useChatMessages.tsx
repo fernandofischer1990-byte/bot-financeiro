@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import {
+  ChatMessageRow,
+  fetchChatMessages,
+  insertChatMessage,
+  deleteChatMessages,
+} from '@/services/chatMessagesService';
 
-export interface ChatMessage {
-  id: string;
-  user_id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
+export type ChatMessage = ChatMessageRow;
 
 export function useChatMessages() {
   const { user } = useAuth();
@@ -24,66 +22,41 @@ export function useChatMessages() {
     }
 
     setLoading(true);
-    
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
+    console.log('[Chat] Fetching messages for user');
+
+    const { data, error } = await fetchChatMessages(user.id);
 
     if (error) {
-      console.error('Error fetching messages:', error);
-      setLoading(false);
-      return;
+      console.error('[Chat] Error fetching messages:', error);
+    } else if (data !== null) {
+      setMessages(data);
+      console.log(`[Chat] Loaded ${data.length} messages`);
     }
 
-    setMessages((data || []).map(msg => ({
-      ...msg,
-      role: msg.role as 'user' | 'assistant',
-      metadata: msg.metadata as Record<string, unknown> | null,
-    })));
     setLoading(false);
   }, [user]);
 
   const addMessage = async (role: 'user' | 'assistant', content: string, metadata?: Record<string, unknown>): Promise<ChatMessage | null> => {
     if (!user) return null;
 
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .insert([{
-        user_id: user.id,
-        role,
-        content,
-        metadata: (metadata as Record<string, unknown> | null) ?? null,
-      } as { user_id: string; role: string; content: string; metadata: null }])
-      .select()
-      .single();
+    const { data, error } = await insertChatMessage(user.id, role, content, metadata);
 
-    if (error) {
-      console.error('Error adding message:', error);
+    if (error || !data) {
+      console.error('[Chat] Error adding message:', error);
       return null;
     }
 
-    const newMessage: ChatMessage = {
-      ...data,
-      role: data.role as 'user' | 'assistant',
-      metadata: data.metadata as Record<string, unknown> | null,
-    };
-
-    setMessages(prev => [...prev, newMessage]);
-    return newMessage;
+    setMessages(prev => [...prev, data]);
+    return data;
   };
 
   const clearHistory = async (): Promise<boolean> => {
     if (!user) return false;
 
-    const { error } = await supabase
-      .from('chat_messages')
-      .delete()
-      .eq('user_id', user.id);
+    const { error } = await deleteChatMessages(user.id);
 
     if (error) {
-      console.error('Error clearing history:', error);
+      console.error('[Chat] Error clearing history:', error);
       return false;
     }
 
