@@ -112,15 +112,19 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const overallMetrics = useMemo(() => calculateMetrics(transactions), [transactions]);
 
   const fetchTransactions = useCallback(async (silent = false) => {
-    if (authLoading) return; // auth not ready yet — do nothing
+    if (authLoading) return;
     if (!user) {
-      setTransactions([]);  // user definitively logged out
+      setTransactions([]);
       setInitialLoading(false);
       setLoadError(null);
+      console.log('[Transactions] No user — cleared state');
       return;
     }
 
-    if (fetchingRef.current) return;
+    if (fetchingRef.current) {
+      console.log('[Transactions] Fetch already in progress — skipping');
+      return;
+    }
     fetchingRef.current = true;
 
     if (!hasLoadedOnce) {
@@ -130,23 +134,27 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       setRefreshing(true);
     }
 
+    console.log('[Transactions] Fetching user data');
     const { data, error } = await fetchUserTransactions(user.id);
 
     if (error) {
+      console.error('[Transactions] Fetch error:', error);
       setLoadError(error);
       if (!silent) {
         toastRef.current({ title: 'Erro ao carregar transações', description: error, variant: 'destructive' });
       }
+      // DO NOT overwrite transactions on error — preserve existing state
     } else if (data !== null) {
       setTransactions(sortByDateDesc(data));
       setLoadError(null);
       setHasLoadedOnce(true);
+      console.log(`[Transactions] Loaded ${data.length} transactions`);
     }
 
     fetchingRef.current = false;
     setInitialLoading(false);
     setRefreshing(false);
-  }, [user, authLoading]);
+  }, [user, authLoading, hasLoadedOnce]);
 
   const handleAddTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
     if (!user) return null;
@@ -162,7 +170,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       setTransactions(prev => sortByDateDesc([data, ...prev]));
       return data;
     } catch (e) {
-      console.error('[TransactionsContext] handleAddTransaction error:', e);
+      console.error('[Transactions] handleAddTransaction error:', e);
       toast({ title: 'Erro ao adicionar transação', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
       return null;
     }
@@ -185,7 +193,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
       return data.length;
     } catch (e) {
-      console.error('[TransactionsContext] handleAddMultiple error:', e);
+      console.error('[Transactions] handleAddMultiple error:', e);
       toast({ title: 'Erro ao importar transações', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
       return 0;
     }
@@ -213,7 +221,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       toast({ title: '✅ Transação atualizada!' });
       return true;
     } catch (e) {
-      console.error('[TransactionsContext] handleUpdate error:', e);
+      console.error('[Transactions] handleUpdate error:', e);
       if (rollback) setTransactions(rollback);
       toast({ title: 'Erro ao atualizar transação', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
       return false;
@@ -275,10 +283,10 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   // Initial fetch — only after auth is resolved
   useEffect(() => {
     if (!authLoading) {
+      console.log(`[Transactions] Auth resolved — user: ${user?.id ?? 'none'}`);
       fetchTransactions();
     }
   }, [authLoading, fetchTransactions]);
-
 
   const value: TransactionsContextValue = {
     transactions,
@@ -313,4 +321,3 @@ export function useTransactionsContext() {
   }
   return context;
 }
-

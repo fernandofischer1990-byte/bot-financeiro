@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { trackEvent } from '@/services/analyticsService';
 
 interface AuthContextType {
   user: User | null;
@@ -22,11 +23,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    console.log('[Auth] Initializing auth provider');
 
-    // Hard safety net: never keep the app blocked forever on mobile/network issues.
+    // Hard safety net: never keep the app blocked forever
     const timeoutId = window.setTimeout(() => {
       if (!mounted) return;
-      console.warn('Timeout ao inicializar autenticação; liberando a UI.');
+      console.warn('[Auth] Timeout — releasing UI');
       setLoading(false);
     }, 8000);
 
@@ -35,35 +37,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       window.clearTimeout(timeoutId);
+      console.log(`[Auth] State change: ${event}, user: ${session?.user?.id ?? 'none'}`);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
 
-      if (event === 'SIGNED_IN') {
-        try {
-          // Track login event
-          await supabase.from('analytics_events').insert({
-            user_id: session?.user?.id,
-            event_name: 'user_logged_in',
-            properties: { method: 'email' },
-          });
-        } catch (err) {
-          console.warn('Falha ao registrar analytics de login:', err);
-        }
+      if (event === 'SIGNED_IN' && session?.user?.id) {
+        trackEvent(session.user.id, 'user_logged_in', { method: 'email' });
       }
     });
 
-    // THEN check for existing session (never leave the app stuck in loading on failures)
+    // THEN check for existing session
     (async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (!mounted) return;
-        
-        // Detectar sessão inválida/expirada
+
         if (error) {
-          console.error('Erro ao recuperar sessão:', error);
-          // Se refresh token inválido, fazer logout local
-          if (error.message?.includes('Invalid Refresh Token') || 
+          console.error('[Auth] Session recovery error:', error.message);
+          if (error.message?.includes('Invalid Refresh Token') ||
               error.message?.includes('refresh_token_not_found')) {
             toast({
               title: 'Sessão expirada',
@@ -72,18 +64,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             setSession(null);
             setUser(null);
-            // Tentar limpar sessão localmente
-            try {
-              await supabase.auth.signOut({ scope: 'local' });
-            } catch {}
+            try { await supabase.auth.signOut({ scope: 'local' }); } catch {}
           }
           return;
         }
-        
+
+        console.log(`[Auth] Session recovered: ${session?.user?.id ?? 'none'}`);
         setSession(session);
         setUser(session?.user ?? null);
       } catch (err) {
-        console.error('Falha ao recuperar sessão:', err);
+        console.error('[Auth] Failed to recover session:', err);
       } finally {
         window.clearTimeout(timeoutId);
         if (mounted) setLoading(false);
