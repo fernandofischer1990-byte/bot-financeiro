@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -39,29 +39,31 @@ export function TransactionList({
 }: TransactionListProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
 
-  const sortedTransactions = [...transactions].sort((a, b) => {
-    const dateA = new Date(a.transaction_date).getTime();
-    const dateB = new Date(b.transaction_date).getTime();
-    return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
-  });
+  const displayTransactions = useMemo(() => {
+    const sorted = [...transactions].sort((a, b) => {
+      const dateA = new Date(a.transaction_date).getTime();
+      const dateB = new Date(b.transaction_date).getTime();
+      return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+    return sorted.slice(0, maxItems);
+  }, [transactions, sortOrder, maxItems]);
 
-  const displayTransactions = sortedTransactions.slice(0, maxItems);
+  const { groupedTransactions, sortedDateKeys } = useMemo(() => {
+    const groups = displayTransactions.reduce((acc, tx) => {
+      const dateKey = tx.transaction_date;
+      if (!acc[dateKey]) acc[dateKey] = [];
+      acc[dateKey].push(tx);
+      return acc;
+    }, {} as Record<string, Transaction[]>);
 
-  // Group transactions by date
-  const groupedTransactions = displayTransactions.reduce((groups, tx) => {
-    const dateKey = tx.transaction_date;
-    if (!groups[dateKey]) {
-      groups[dateKey] = [];
-    }
-    groups[dateKey].push(tx);
-    return groups;
-  }, {} as Record<string, Transaction[]>);
+    const keys = Object.keys(groups).sort((a, b) =>
+      sortOrder === 'newest'
+        ? new Date(b).getTime() - new Date(a).getTime()
+        : new Date(a).getTime() - new Date(b).getTime()
+    );
 
-  const sortedDateKeys = Object.keys(groupedTransactions).sort((a, b) => {
-    return sortOrder === 'newest' 
-      ? new Date(b).getTime() - new Date(a).getTime()
-      : new Date(a).getTime() - new Date(b).getTime();
-  });
+    return { groupedTransactions: groups, sortedDateKeys: keys };
+  }, [displayTransactions, sortOrder]);
 
   return (
     <Card className="shadow-sm">
