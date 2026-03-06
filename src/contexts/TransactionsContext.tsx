@@ -62,7 +62,9 @@ interface TransactionsContextValue {
   refetch: () => Promise<void>;
 }
 
-const TransactionsContext = createContext<TransactionsContextValue | null>(null);
+const CONTEXT_KEY = '__TransactionsContext__';
+const TransactionsContext: React.Context<TransactionsContextValue | null> =
+  (globalThis as any)[CONTEXT_KEY] ??= createContext<TransactionsContextValue | null>(null);
 
 function sortByDateDesc(txs: Transaction[]): Transaction[] {
   return [...txs].sort((a, b) =>
