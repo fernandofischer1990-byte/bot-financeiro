@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
+import { useToast } from './use-toast';
 import {
   ChatMessageRow,
   fetchChatMessages,
@@ -11,6 +12,7 @@ export type ChatMessage = ChatMessageRow;
 
 export function useChatMessages() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -43,6 +45,7 @@ export function useChatMessages() {
 
     if (error || !data) {
       console.error('[Chat] Error adding message:', error);
+      toast({ title: 'Erro ao salvar mensagem', description: error || 'Erro desconhecido', variant: 'destructive' });
       return null;
     }
 

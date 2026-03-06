@@ -126,8 +126,9 @@ export function ChatInterface() {
     const timeoutId = setTimeout(() => abortControllerRef.current?.abort(), CHAT_TIMEOUT_MS);
 
     try {
+      const trimmedHistory = [...messages, { role: 'user' as const, content: userMessage }].slice(-30);
       const response = await sendChatMessage(
-        [...messages, { role: 'user' as const, content: userMessage }],
+        trimmedHistory,
         { balance: metrics.totalBalance, income: metrics.totalIncome, expenses: metrics.totalExpenses, recentTransactions },
         abortControllerRef.current.signal
       );

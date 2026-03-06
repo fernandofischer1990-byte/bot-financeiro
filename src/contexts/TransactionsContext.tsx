@@ -81,6 +81,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
   const fetchingRef = useRef(false);
   const [filters, setFilters] = useState<FilterState>({
     period: 'all',
@@ -127,7 +128,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     }
     fetchingRef.current = true;
 
-    if (!hasLoadedOnce) {
+    if (!hasLoadedOnceRef.current) {
       setInitialLoading(true);
       setLoadError(null);
     } else if (!silent) {
@@ -147,6 +148,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     } else if (data !== null) {
       setTransactions(sortByDateDesc(data));
       setLoadError(null);
+      hasLoadedOnceRef.current = true;
       setHasLoadedOnce(true);
       console.log(`[Transactions] Loaded ${data.length} transactions`);
     }
@@ -154,7 +156,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     fetchingRef.current = false;
     setInitialLoading(false);
     setRefreshing(false);
-  }, [user, authLoading, hasLoadedOnce]);
+  }, [user, authLoading]);
 
   const handleAddTransaction = useCallback(async (input: TransactionInput): Promise<Transaction | null> => {
     if (!user) return null;
@@ -288,7 +290,9 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     }
   }, [authLoading, fetchTransactions]);
 
-  const value: TransactionsContextValue = {
+  const refetch = useCallback(() => fetchTransactions(false), [fetchTransactions]);
+
+  const value: TransactionsContextValue = useMemo(() => ({
     transactions,
     filteredTransactions,
     metrics,
@@ -304,8 +308,8 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     updateTransaction: handleUpdate,
     deleteTransaction: handleDelete,
     deleteAllTransactions: handleDeleteAll,
-    refetch: () => fetchTransactions(false),
-  };
+    refetch,
+  }), [transactions, filteredTransactions, metrics, overallMetrics, initialLoading, hasLoadedOnce, refreshing, loadError, filters, handleAddTransaction, handleAddMultiple, handleUpdate, handleDelete, handleDeleteAll, refetch]);
 
   return (
     <TransactionsContext.Provider value={value}>
