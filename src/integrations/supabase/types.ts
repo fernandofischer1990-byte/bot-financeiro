@@ -65,6 +65,42 @@ export type Database = {
         }
         Relationships: []
       }
+      import_history: {
+        Row: {
+          created_at: string
+          duplicate_records: number
+          file_format: string
+          file_name: string
+          id: string
+          imported_records: number
+          skipped_records: number
+          total_records: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duplicate_records?: number
+          file_format: string
+          file_name: string
+          id?: string
+          imported_records?: number
+          skipped_records?: number
+          total_records?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duplicate_records?: number
+          file_format?: string
+          file_name?: string
+          id?: string
+          imported_records?: number
+          skipped_records?: number
+          total_records?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
