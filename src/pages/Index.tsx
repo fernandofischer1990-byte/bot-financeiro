@@ -4,7 +4,7 @@ import { AuthPage } from '@/components/auth/AuthPage';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ChatInterface } from '@/components/chat/ChatInterface';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
-import { FileUpload } from '@/components/transactions/FileUpload';
+import { ImportWizard } from '@/components/import/ImportWizard';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, LogOut, Wallet, LayoutDashboard, MessageSquare, Plus, Upload } from 'lucide-react';
