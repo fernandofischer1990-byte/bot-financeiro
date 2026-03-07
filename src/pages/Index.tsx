@@ -106,9 +106,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
           </TabsContent>
 
           <TabsContent value="import">
-            <div className="max-w-md mx-auto">
-              <FileUpload />
-            </div>
+            <ImportWizard />
           </TabsContent>
         </Tabs>
       </main>
