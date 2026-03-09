@@ -52,6 +52,8 @@ export function ImportWizard() {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [totalParsed, setTotalParsed] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const [userMappings, setUserMappings] = useState<CategoryMapping[]>([]);
+  const originalRowsRef = useRef<ImportRow[]>([]);
 
   const { transactions, addMultipleTransactions } = useTransactionsContext();
   const { user } = useAuth();
