@@ -227,10 +227,11 @@ export function ImportWizard() {
     }).filter(r => !r.error && r.amount > 0);
 
     setTotalParsed(normalized.length);
-    const withDuplicates = detectDuplicates(normalized, transactions);
+    const withDuplicates = detectDuplicates(normalized as any, transactions);
+    originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
     setImportRows(withDuplicates);
     setStep('duplicates');
-  }, [transactions]);
+  }, [transactions, userMappings]);
 
   const handleMappingConfirm = useCallback(() => {
     processSpreadsheetData(rawData, mapping);
