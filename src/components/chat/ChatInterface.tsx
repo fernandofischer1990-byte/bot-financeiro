@@ -350,7 +350,7 @@ export function ChatInterface() {
               <div className="bg-muted p-4 rounded-lg max-w-[85%] border border-border shadow-sm">
                 <h4 className="font-medium text-sm mb-2">Confirmar Transação</h4>
                 {spendingAlertText && (
-                  <div className="text-xs bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border border-yellow-500/20 rounded-md px-3 py-1.5 mb-2 font-medium">
+                  <div className="text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md px-3 py-1.5 mb-2 font-medium">
                     {spendingAlertText}
                   </div>
                 )}
