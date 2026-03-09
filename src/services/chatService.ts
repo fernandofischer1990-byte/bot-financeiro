@@ -4,6 +4,11 @@ export interface ChatContext {
   balance: number;
   income: number;
   expenses: number;
+  income_month: number;
+  expenses_month: number;
+  savings_rate: number;
+  health_score: number;
+  top_categories: { category: string; amount: number }[];
   top_spending_categories?: Record<string, number>;
   recentTransactions: {
     id: string;
@@ -13,6 +18,8 @@ export interface ChatContext {
     description: string | null;
     date: string;
   }[];
+  insights: string[];
+  budgets: null;
 }
 
 export interface ChatMessagePayload {
@@ -22,7 +29,6 @@ export interface ChatMessagePayload {
 
 /**
  * Send chat message to edge function and return the raw Response for SSE streaming.
- * Caller is responsible for reading the stream.
  */
 export async function sendChatMessage(
   messages: ChatMessagePayload[],
@@ -92,7 +98,6 @@ export async function* readSSEStream(response: Response): AsyncGenerator<string>
         }
       } catch (e) {
         console.warn('[SSE] Skipping malformed JSON chunk:', jsonStr.slice(0, 100), e);
-        // Skip malformed line instead of retrying infinitely
       }
     }
   }
@@ -106,12 +111,10 @@ export async function* readSSEStream(response: Response): AsyncGenerator<string>
       yield* processBuffer();
     }
 
-    // Flush remaining bytes from TextDecoder
     buffer += decoder.decode();
 
-    // Process any remaining complete lines in the buffer
     if (buffer.trim()) {
-      buffer += '\n'; // Ensure last line gets processed
+      buffer += '\n';
       yield* processBuffer();
     }
   } finally {

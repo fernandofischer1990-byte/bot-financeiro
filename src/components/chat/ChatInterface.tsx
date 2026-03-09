@@ -5,11 +5,19 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2 } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle } from 'lucide-react';
 import { formatCurrency, getCategoryLabel } from '@/lib/constants';
 import { extractAction, ParsedAction } from '@/lib/actionParser';
-import { sendChatMessage, readSSEStream } from '@/services/chatService';
+import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
 import { MessageBubble } from './MessageBubble';
+import {
+  getMonthlyMetrics,
+  getSavingsRate,
+  getFinancialHealthScore,
+  getTopCategories,
+  detectSpendingInsights,
+  getSpendingAlert,
+} from '@/lib/financialAnalytics';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +56,14 @@ function cleanContentForDisplay(content: string): string {
     .trim();
 }
 
+const QUICK_ACTIONS = [
+  { label: 'Adicionar despesa', icon: TrendingDown },
+  { label: 'Adicionar receita', icon: PlusCircle },
+  { label: '/monthly_report', icon: BarChart3 },
+  { label: 'Analisar meus gastos', icon: TrendingUp },
+  { label: 'Score financeiro', icon: Activity },
+];
+
 export function ChatInterface() {
   const { overallMetrics: metrics, transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
   const [input, setInput] = useState('');
@@ -57,8 +73,16 @@ export function ChatInterface() {
   const [pendingAddTransaction, setPendingAddTransaction] = useState<{ action: ParsedAction, isDuplicate: boolean } | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const insightsShownRef = useRef(false);
   const { messages, addMessage, clearHistory } = useChatMessages();
   const { toast } = useToast();
+
+  // ── Computed analytics ──────────────────────────────────────────
+  const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions]);
+  const savingsRate = useMemo(() => getSavingsRate(monthlyMetrics.income_month, monthlyMetrics.expenses_month), [monthlyMetrics]);
+  const healthScore = useMemo(() => getFinancialHealthScore(transactions), [transactions]);
+  const topCategories = useMemo(() => getTopCategories(transactions), [transactions]);
+  const spendingInsights = useMemo(() => detectSpendingInsights(transactions), [transactions]);
 
   const recentTransactions = useMemo(() =>
     transactions.slice(0, 10).map(t => ({
@@ -77,6 +101,54 @@ export function ChatInterface() {
       .reduce((acc, [k,v]) => ({...acc, [k]: v}), {});
   }, [metrics.byCategory]);
 
+  const chatContext: ChatContext = useMemo(() => ({
+    balance: metrics.totalBalance,
+    income: metrics.totalIncome,
+    expenses: metrics.totalExpenses,
+    income_month: monthlyMetrics.income_month,
+    expenses_month: monthlyMetrics.expenses_month,
+    savings_rate: savingsRate,
+    health_score: healthScore.score,
+    top_categories: topCategories,
+    top_spending_categories: topSpendingCategories,
+    recentTransactions,
+    insights: spendingInsights,
+    budgets: null,
+  }), [metrics, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, spendingInsights]);
+
+  // ── Proactive insights on chat open ─────────────────────────────
+  useEffect(() => {
+    if (insightsShownRef.current) return;
+    if (messages.length > 0) {
+      insightsShownRef.current = true;
+      return;
+    }
+    if (transactions.length === 0) return;
+
+    // Generate an auto-insight message
+    const parts: string[] = [];
+    parts.push(`📊 **Resumo rápido do mês:**`);
+    parts.push(`- Receitas: R$ ${monthlyMetrics.income_month.toFixed(2)}`);
+    parts.push(`- Despesas: R$ ${monthlyMetrics.expenses_month.toFixed(2)}`);
+    parts.push(`- Taxa de poupança: ${savingsRate}%`);
+    parts.push(`- Score financeiro: ${healthScore.score}/100`);
+
+    if (spendingInsights.length > 0) {
+      parts.push('');
+      parts.push('**Insights detectados:**');
+      for (const insight of spendingInsights.slice(0, 3)) {
+        parts.push(`- ${insight}`);
+      }
+    }
+
+    parts.push('');
+    parts.push('Como posso ajudar com suas finanças hoje? 💬');
+
+    const insightMessage = parts.join('\n');
+    insightsShownRef.current = true;
+    addMessage('assistant', JSON.stringify({ message: insightMessage }));
+  }, [messages.length, transactions.length, monthlyMetrics, savingsRate, healthScore.score, spendingInsights, addMessage]);
+
   useEffect(() => {
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
@@ -94,9 +166,7 @@ export function ChatInterface() {
       return;
     }
 
-    if (!result.action) {
-      return;
-    }
+    if (!result.action) return;
 
     const action = result.action;
 
@@ -172,17 +242,7 @@ export function ChatInterface() {
 
     try {
       const trimmedHistory = [...messages, { role: 'user' as const, content: userMessage }].slice(-30);
-      const response = await sendChatMessage(
-        trimmedHistory,
-        { 
-          balance: metrics.totalBalance, 
-          income: metrics.totalIncome, 
-          expenses: metrics.totalExpenses, 
-          top_spending_categories: topSpendingCategories,
-          recentTransactions 
-        },
-        abortControllerRef.current.signal
-      );
+      const response = await sendChatMessage(trimmedHistory, chatContext, abortControllerRef.current.signal);
 
       let fullContent = '';
       for await (const chunk of readSSEStream(response)) {
@@ -211,9 +271,18 @@ export function ChatInterface() {
   };
 
   const handleClearHistory = async () => {
+    insightsShownRef.current = false;
     await clearHistory();
     toast({ title: 'Histórico limpo' });
   };
+
+  // Spending alert for pending transaction
+  const spendingAlertText = useMemo(() => {
+    if (!pendingAddTransaction) return null;
+    const { action } = pendingAddTransaction;
+    if (action.type !== 'expense' || !action.amount) return null;
+    return getSpendingAlert(action.amount, monthlyMetrics.income_month);
+  }, [pendingAddTransaction, monthlyMetrics.income_month]);
 
   return (
     <div className="flex flex-col h-full bg-card rounded-xl border shadow-sm">
@@ -224,8 +293,8 @@ export function ChatInterface() {
             <Bot className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h3 className="font-semibold">FinBot</h3>
-            <p className="text-xs text-muted-foreground">Seu assistente financeiro</p>
+            <h3 className="font-semibold">FinBot Copilot</h3>
+            <p className="text-xs text-muted-foreground">Seu copiloto financeiro inteligente</p>
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={handleClearHistory} title="Limpar histórico">
@@ -240,17 +309,18 @@ export function ChatInterface() {
             <div className="text-center py-8">
               <Bot className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
               <p className="text-muted-foreground text-sm">
-                Olá! Sou o FinBot. 👋<br />
-                Como posso ajudar com suas finanças hoje?
+                Olá! Sou o FinBot Copilot. 🚀<br />
+                Analiso suas finanças e forneço insights inteligentes.
               </p>
               <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                {['Adicionar despesa', 'Adicionar receita', 'Mostrar resumo do mês', 'Listar minhas transações'].map((suggestion) => (
+                {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
                   <button
-                    key={suggestion}
-                    onClick={() => setInput(suggestion)}
-                    className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+                    key={label}
+                    onClick={() => setInput(label)}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
                   >
-                    {suggestion}
+                    <Icon className="h-3 w-3" />
+                    {label}
                   </button>
                 ))}
               </div>
@@ -271,7 +341,7 @@ export function ChatInterface() {
           {isStreaming && !streamingContent && (
             <div className="flex gap-2 items-center text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Pensando...</span>
+              <span className="text-sm">Analisando...</span>
             </div>
           )}
           
@@ -279,6 +349,11 @@ export function ChatInterface() {
             <div className="flex justify-start">
               <div className="bg-muted p-4 rounded-lg max-w-[85%] border border-border shadow-sm">
                 <h4 className="font-medium text-sm mb-2">Confirmar Transação</h4>
+                {spendingAlertText && (
+                  <div className="text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md px-3 py-1.5 mb-2 font-medium">
+                    {spendingAlertText}
+                  </div>
+                )}
                 {pendingAddTransaction.isDuplicate && (
                   <p className="text-xs text-destructive mb-2 font-medium">Esta transação parece ser duplicada. Deseja adicionar mesmo assim?</p>
                 )}
@@ -306,7 +381,7 @@ export function ChatInterface() {
       {/* Input */}
       <div className="p-4 border-t">
         <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
-          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Digite sua mensagem..." disabled={isStreaming} className="flex-1" />
+          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Pergunte sobre suas finanças..." disabled={isStreaming} className="flex-1" />
           {isStreaming ? (
             <Button type="button" variant="destructive" size="icon" onClick={cancelStreaming} title="Cancelar">
               <span className="text-xs font-bold">✕</span>
