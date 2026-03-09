@@ -143,10 +143,18 @@ export function ImportWizard() {
       setStep('loading');
       try {
         const text = await file.text();
-        const normalized = parseQIF(text);
+        const normalized = parseQIF(text).map(t => {
+          const learnedCat = findLearnedCategory(t.description, userMappings);
+          if (learnedCat) {
+            t.category = learnedCat;
+            (t as any).isLearnedCategory = true;
+          }
+          return t;
+        });
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo QIF');
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized, transactions);
+        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do QIF` });
