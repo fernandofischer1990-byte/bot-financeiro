@@ -216,10 +216,11 @@ export function ImportWizard() {
         const originalAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(',', '.'));
         const type = inferTransactionType(rawType, originalAmount);
         const description = cleanDescription(String(rawDesc || '').trim());
-        const category = normalizeCategory(rawCat || undefined, type, description);
+        const learnedCat = findLearnedCategory(description, userMappings);
+        const category = learnedCat || normalizeCategory(rawCat || undefined, type, description);
         const date = normalizeToLocalDate(rawDate);
 
-        return { type, amount, category, description, date };
+        return { type, amount, category, description, date, isLearnedCategory: !!learnedCat };
       } catch {
         return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Erro` };
       }
