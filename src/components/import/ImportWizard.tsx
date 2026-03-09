@@ -99,7 +99,8 @@ export function ImportWizard() {
           };
         });
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized, transactions);
+        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do PDF` });
