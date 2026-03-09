@@ -265,6 +265,11 @@ export function ImportWizard() {
         skipped_records: totalParsed - count,
       });
 
+      // Save learned mappings
+      await saveLearnedMappings(user.id, originalRowsRef.current, importRows);
+      // Refresh mappings
+      getUserCategoryMappings(user.id).then(setUserMappings);
+
       toast({ title: `✅ ${count} transações importadas com sucesso!` });
       reset();
     } else {

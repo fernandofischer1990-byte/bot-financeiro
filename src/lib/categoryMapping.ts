@@ -95,7 +95,9 @@ export function suggestCategory(description: string, type: 'income' | 'expense')
   return type === 'expense' ? 'outros_despesa' : 'outros_receita';
 }
 
-export function getCategoryConfidence(description: string, category: string): 'high' | 'medium' | 'low' {
+export function getCategoryConfidence(description: string, category: string, isLearned?: boolean): 'learned' | 'high' | 'medium' | 'low' {
+  if (isLearned) return 'learned';
+  
   const upperDesc = description.toUpperCase();
   const allPatterns = { ...EXPENSE_PATTERNS, ...INCOME_PATTERNS };
   
