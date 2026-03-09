@@ -7,7 +7,7 @@ import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, Trash2 } from 'lucide-react';
 import { formatCurrency, getCategoryLabel } from '@/lib/constants';
-import { extractAction } from '@/lib/actionParser';
+import { extractAction, ParsedAction } from '@/lib/actionParser';
 import { sendChatMessage, readSSEStream } from '@/services/chatService';
 import { MessageBubble } from './MessageBubble';
 import {
@@ -24,6 +24,23 @@ import {
 const CHAT_TIMEOUT_MS = 60000;
 
 function cleanContentForDisplay(content: string): string {
+  try {
+    const startIdx = content.indexOf('{');
+    const endIdx = content.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+      const parsed = JSON.parse(content.slice(startIdx, endIdx + 1));
+      if (parsed.message) return parsed.message;
+    }
+  } catch {
+    const match = content.match(/"message"\s*:\s*"([^]*?)(?:(?<!\\)"|$)/);
+    if (match) {
+      return match[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    }
+  }
+  
   return content
     .replace(/<!--ACTION:[\s\S]*?-->/g, '')
     .replace(/```json[\s\S]*?```/g, '')
@@ -37,6 +54,7 @@ export function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
+  const [pendingAddTransaction, setPendingAddTransaction] = useState<{ action: ParsedAction, isDuplicate: boolean } | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const { messages, addMessage, clearHistory } = useChatMessages();
@@ -52,49 +70,76 @@ export function ChatInterface() {
       date: t.transaction_date,
     })), [transactions]);
 
+  const topSpendingCategories = useMemo(() => {
+    return Object.entries(metrics.byCategory)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .reduce((acc, [k,v]) => ({...acc, [k]: v}), {});
+  }, [metrics.byCategory]);
+
   useEffect(() => {
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     }
-  }, [messages, streamingContent]);
+  }, [messages, streamingContent, pendingAddTransaction]);
 
   const parseAIResponse = useCallback(async (content: string) => {
     const result = extractAction(content);
-    if (!result.success || !result.action) {
+    if (!result.success) {
+      console.error("CHAT_ACTION_ERROR", { rawResponse: content, error: result.error });
       if (result.error && result.error !== 'Nenhuma ação encontrada') {
-        console.error('[Chat] Action extraction failed:', result.error, '\nRaw content:', content);
-        toast({ title: 'Não consegui registrar automaticamente', description: 'Por favor, me diga o valor e a categoria novamente.', variant: 'destructive' });
+        toast({ title: 'Erro de validação', description: 'O assistente tentou executar uma ação inválida.', variant: 'destructive' });
       }
+      return;
+    }
+
+    if (!result.action) {
       return;
     }
 
     const action = result.action;
 
     if (action.action === 'add_transaction' && action.type && action.amount && action.category) {
-      try {
-        const txResult = await addTransaction({
-          type: action.type,
-          amount: action.amount,
-          category: action.category,
-          description: action.description || '',
-          transaction_date: action.date,
-          source: 'chat',
-        });
-        if (txResult) {
-          toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount)} em ${getCategoryLabel(action.category)}` });
-        }
-      } catch (e) {
-        console.error('[Chat] addTransaction failed:', e);
-        toast({ title: 'Erro ao registrar transação', description: 'Tente novamente.', variant: 'destructive' });
-      }
+      const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000);
+      const isDuplicate = transactions.some(t => 
+        t.type === action.type && 
+        Number(t.amount) === action.amount && 
+        t.category === action.category &&
+        new Date(t.created_at || Date.now()) > twoMinsAgo
+      );
+
+      setPendingAddTransaction({ action, isDuplicate });
     } else if (action.action === 'delete_transaction' && action.id) {
       const success = await deleteTransaction(action.id);
       if (success) toast({ title: '🗑️ Transação excluída!' });
     } else if (action.action === 'delete_all_transactions') {
       setPendingDeleteAll({ filter: action.filter || 'all' });
     }
-  }, [addTransaction, deleteTransaction, toast]);
+  }, [addTransaction, deleteTransaction, toast, transactions]);
+
+  const handleConfirmAddTransaction = async () => {
+    if (!pendingAddTransaction) return;
+    const { action } = pendingAddTransaction;
+    try {
+      const txResult = await addTransaction({
+        type: action.type!,
+        amount: action.amount!,
+        category: action.category!,
+        description: action.description || '',
+        transaction_date: action.date,
+        source: 'chat',
+      });
+      if (txResult) {
+        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount!)} em ${getCategoryLabel(action.category!)}` });
+      }
+    } catch (e) {
+      console.error('[Chat] addTransaction failed:', e);
+      toast({ title: 'Erro ao registrar transação', description: 'Tente novamente.', variant: 'destructive' });
+    } finally {
+      setPendingAddTransaction(null);
+    }
+  };
 
   const handleConfirmDeleteAll = async () => {
     if (!pendingDeleteAll) return;
@@ -129,7 +174,13 @@ export function ChatInterface() {
       const trimmedHistory = [...messages, { role: 'user' as const, content: userMessage }].slice(-30);
       const response = await sendChatMessage(
         trimmedHistory,
-        { balance: metrics.totalBalance, income: metrics.totalIncome, expenses: metrics.totalExpenses, recentTransactions },
+        { 
+          balance: metrics.totalBalance, 
+          income: metrics.totalIncome, 
+          expenses: metrics.totalExpenses, 
+          top_spending_categories: topSpendingCategories,
+          recentTransactions 
+        },
         abortControllerRef.current.signal
       );
 
@@ -149,6 +200,7 @@ export function ChatInterface() {
       if (error instanceof Error) {
         errorMessage = error.name === 'AbortError' ? 'Requisição cancelada ou tempo limite excedido' : error.message;
       }
+      console.error("CHAT_ACTION_ERROR", { error: errorMessage });
       toast({ title: 'Erro', description: errorMessage, variant: 'destructive' });
       setStreamingContent('');
     } finally {
@@ -192,7 +244,7 @@ export function ChatInterface() {
                 Como posso ajudar com suas finanças hoje?
               </p>
               <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                {['Quanto gastei esse mês?', 'Adicionar despesa de R$ 50', 'Listar minhas transações'].map((suggestion) => (
+                {['Adicionar despesa', 'Adicionar receita', 'Mostrar resumo do mês', 'Listar minhas transações'].map((suggestion) => (
                   <button
                     key={suggestion}
                     onClick={() => setInput(suggestion)}
@@ -222,6 +274,32 @@ export function ChatInterface() {
               <span className="text-sm">Pensando...</span>
             </div>
           )}
+          
+          {pendingAddTransaction && (
+            <div className="flex justify-start">
+              <div className="bg-muted p-4 rounded-lg max-w-[85%] border border-border shadow-sm">
+                <h4 className="font-medium text-sm mb-2">Confirmar Transação</h4>
+                {pendingAddTransaction.isDuplicate && (
+                  <p className="text-xs text-destructive mb-2 font-medium">Esta transação parece ser duplicada. Deseja adicionar mesmo assim?</p>
+                )}
+                <div className="text-sm space-y-1 mb-3">
+                  <p><span className="text-muted-foreground">Tipo:</span> {pendingAddTransaction.action.type === 'income' ? 'Receita' : 'Despesa'}</p>
+                  <p><span className="text-muted-foreground">Valor:</span> {formatCurrency(pendingAddTransaction.action.amount!)}</p>
+                  <p><span className="text-muted-foreground">Categoria:</span> {getCategoryLabel(pendingAddTransaction.action.category!)}</p>
+                  {pendingAddTransaction.action.description && (
+                    <p><span className="text-muted-foreground">Descrição:</span> {pendingAddTransaction.action.description}</p>
+                  )}
+                  {pendingAddTransaction.action.date && (
+                    <p><span className="text-muted-foreground">Data:</span> {new Date(pendingAddTransaction.action.date).toLocaleDateString('pt-BR')}</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleConfirmAddTransaction} className="flex-1">Confirmar</Button>
+                  <Button size="sm" variant="outline" onClick={() => setPendingAddTransaction(null)} className="flex-1">Cancelar</Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
@@ -241,7 +319,7 @@ export function ChatInterface() {
         </form>
       </div>
 
-      {/* Confirmation Dialog */}
+      {/* Confirmation Dialog for Delete All */}
       <AlertDialog open={!!pendingDeleteAll} onOpenChange={(open) => !open && setPendingDeleteAll(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
