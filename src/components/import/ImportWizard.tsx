@@ -59,6 +59,12 @@ export function ImportWizard() {
   const { user } = useAuth();
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (user) {
+      getUserCategoryMappings(user.id).then(setUserMappings);
+    }
+  }, [user]);
+
   const reset = useCallback(() => {
     setStep('upload');
     setFileName('');
