@@ -21,6 +21,7 @@ import { parseStatementPDF } from '@/services/fileParsingService';
 import { detectDuplicates, ImportRow, getDuplicateCounts } from '@/lib/duplicateDetector';
 import { cleanDescription } from '@/lib/descriptionCleaner';
 import { saveImportHistory } from '@/services/importService';
+import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, CategoryMapping } from '@/services/categoryMappingService';
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
