@@ -197,7 +197,7 @@ export function ImportWizard() {
     }
 
     toast({ title: 'Formato não suportado', description: 'Use PDF, CSV, XLS, XLSX, ODS, TSV, OFX ou QIF', variant: 'destructive' });
-  }, [transactions, toast, reset]);
+  }, [transactions, toast, reset, userMappings]);
 
   const processSpreadsheetData = useCallback((data: Record<string, unknown>[], map: ColumnMapping) => {
     const normalized: NormalizedTransactionRow[] = data.map((row, i) => {
