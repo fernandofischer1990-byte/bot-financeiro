@@ -87,13 +87,17 @@ export function ImportWizard() {
       setStep('loading');
       try {
         const result = await parseStatementPDF(file);
-        const normalized: NormalizedTransactionRow[] = result.transactions.map(t => ({
-          type: t.type,
-          amount: t.amount,
-          category: t.suggestedCategory,
-          description: t.description,
-          date: t.date,
-        }));
+        const normalized: NormalizedTransactionRow[] = result.transactions.map(t => {
+          const learnedCat = findLearnedCategory(t.description, userMappings);
+          return {
+            type: t.type,
+            amount: t.amount,
+            category: learnedCat || t.suggestedCategory,
+            description: t.description,
+            date: t.date,
+            isLearnedCategory: !!learnedCat
+          };
+        });
         setTotalParsed(normalized.length);
         const withDuplicates = detectDuplicates(normalized, transactions);
         setImportRows(withDuplicates);
