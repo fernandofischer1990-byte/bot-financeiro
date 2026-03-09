@@ -4,6 +4,7 @@ export interface ChatContext {
   balance: number;
   income: number;
   expenses: number;
+  top_spending_categories?: Record<string, number>;
   recentTransactions: {
     id: string;
     type: string;
