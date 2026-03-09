@@ -1,32 +1,24 @@
 
+**Refactoring Plan for AI Financial Chat Assistant**
 
-# Fix: HMR-resilient TransactionsContext
+I will improve the AI chat assistant to make it more reliable, secure, and intelligent by transitioning to structured JSON responses and implementing safety layers.
 
-## Problem
+### 1. Structure AI Responses (Backend & Parsing)
+*   **`supabase/functions/chat/index.ts`**: Update the system prompt to enforce a strict JSON response format `{"message": "...", "action": {...}}`. I will remove the old regex-based HTML comment format. 
+*   **`src/lib/actionParser.ts`**: Replace `extractAction` with robust JSON parsing using Zod. I'll add strict validations: `amount > 0`, valid categories, and valid dates. If parsing or validation fails, it will safely return an error without breaking the app.
 
-The `useTransactionsContext must be used within TransactionsProvider` error keeps recurring despite the component hierarchy being correct (`App.tsx` wraps everything in `TransactionsProvider`). This is caused by Vite HMR creating new module instances of `TransactionsContext.tsx` — the new `createContext()` call produces a different context object than what existing consumer components reference.
+### 2. Streaming Safety & Display Logic
+*   **`src/components/chat/ChatInterface.tsx`**: Update the streaming display function (`cleanContentForDisplay`) to incrementally extract and render only the `"message"` string value while the JSON chunks are streaming in. Action execution will be strictly deferred until the stream is fully complete.
 
-## Fix
+### 3. Safety & Confirmation Layer
+*   **`src/components/chat/ChatInterface.tsx`**: 
+    *   **User Confirmation**: Intercept `add_transaction` actions and display a confirmation dialog showing the transaction details (Type, Amount, Category, Description) before saving.
+    *   **Duplicate Protection**: Before confirming, check if an identical transaction (same amount and category) was created in the last 2 minutes. If a duplicate is detected, the dialog will show a clear warning: *"This transaction looks like a duplicate. Do you want to add it anyway?"*
 
-Make the context object survive HMR by storing it on a module-level stable reference using `globalThis`:
+### 4. Better Financial Context
+*   **`src/services/chatService.ts`**: Expand `ChatContext` to include `top_spending_categories`.
+*   **`src/components/chat/ChatInterface.tsx`**: Compute the top categories from the existing `metrics` context and send them to the AI, enabling it to intelligently answer questions like *"What category do I spend the most on?"*
 
-```typescript
-// At line 65, replace:
-const TransactionsContext = createContext<TransactionsContextValue | null>(null);
-
-// With:
-const CONTEXT_KEY = '__TransactionsContext__';
-const TransactionsContext: React.Context<TransactionsContextValue | null> =
-  (globalThis as any)[CONTEXT_KEY] ??= createContext<TransactionsContextValue | null>(null);
-```
-
-This ensures that even when HMR reloads the module, the same React context object is reused, preventing the provider/consumer mismatch.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `src/contexts/TransactionsContext.tsx` | Use `globalThis` to persist the context object across HMR reloads |
-
-1 file, 1 line changed. No database changes. After this fix, we can proceed with the chat streaming test.
-
+### 5. Error Logging & UX Polish
+*   **Error Logging**: Implement `console.error("CHAT_ACTION_ERROR", { rawResponse, parsedAction, error })` for structured debugging.
+*   **UX Improvements**: Update the initial quick suggestion buttons to match the new capabilities: *Add expense, Add income, Show monthly summary, Show my transactions*.
