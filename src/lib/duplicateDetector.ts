@@ -9,6 +9,7 @@ export interface ImportRow extends NormalizedTransactionRow {
   duplicateStatus: DuplicateStatus;
   duplicateOf?: string; // id of existing transaction
   selected: boolean;
+  isLearnedCategory?: boolean;
 }
 
 /**

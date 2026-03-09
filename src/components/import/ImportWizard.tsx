@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransactionsContext, TransactionInput } from '@/contexts/TransactionsContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,6 +21,7 @@ import { parseStatementPDF } from '@/services/fileParsingService';
 import { detectDuplicates, ImportRow, getDuplicateCounts } from '@/lib/duplicateDetector';
 import { cleanDescription } from '@/lib/descriptionCleaner';
 import { saveImportHistory } from '@/services/importService';
+import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, CategoryMapping } from '@/services/categoryMappingService';
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
@@ -51,10 +52,18 @@ export function ImportWizard() {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [totalParsed, setTotalParsed] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const [userMappings, setUserMappings] = useState<CategoryMapping[]>([]);
+  const originalRowsRef = useRef<ImportRow[]>([]);
 
   const { transactions, addMultipleTransactions } = useTransactionsContext();
   const { user } = useAuth();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (user) {
+      getUserCategoryMappings(user.id).then(setUserMappings);
+    }
+  }, [user]);
 
   const reset = useCallback(() => {
     setStep('upload');
@@ -78,15 +87,20 @@ export function ImportWizard() {
       setStep('loading');
       try {
         const result = await parseStatementPDF(file);
-        const normalized: NormalizedTransactionRow[] = result.transactions.map(t => ({
-          type: t.type,
-          amount: t.amount,
-          category: t.suggestedCategory,
-          description: t.description,
-          date: t.date,
-        }));
+        const normalized: NormalizedTransactionRow[] = result.transactions.map(t => {
+          const learnedCat = findLearnedCategory(t.description, userMappings);
+          return {
+            type: t.type,
+            amount: t.amount,
+            category: learnedCat || t.suggestedCategory,
+            description: t.description,
+            date: t.date,
+            isLearnedCategory: !!learnedCat
+          };
+        });
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized, transactions);
+        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do PDF` });
@@ -102,10 +116,18 @@ export function ImportWizard() {
       setStep('loading');
       try {
         const text = await file.text();
-        const normalized = parseOFX(text);
+        const normalized = parseOFX(text).map(t => {
+          const learnedCat = findLearnedCategory(t.description, userMappings);
+          if (learnedCat) {
+            t.category = learnedCat;
+            (t as any).isLearnedCategory = true;
+          }
+          return t;
+        });
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo OFX');
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized, transactions);
+        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do OFX` });
@@ -121,10 +143,18 @@ export function ImportWizard() {
       setStep('loading');
       try {
         const text = await file.text();
-        const normalized = parseQIF(text);
+        const normalized = parseQIF(text).map(t => {
+          const learnedCat = findLearnedCategory(t.description, userMappings);
+          if (learnedCat) {
+            t.category = learnedCat;
+            (t as any).isLearnedCategory = true;
+          }
+          return t;
+        });
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo QIF');
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized, transactions);
+        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do QIF` });
@@ -167,7 +197,7 @@ export function ImportWizard() {
     }
 
     toast({ title: 'Formato não suportado', description: 'Use PDF, CSV, XLS, XLSX, ODS, TSV, OFX ou QIF', variant: 'destructive' });
-  }, [transactions, toast, reset]);
+  }, [transactions, toast, reset, userMappings]);
 
   const processSpreadsheetData = useCallback((data: Record<string, unknown>[], map: ColumnMapping) => {
     const normalized: NormalizedTransactionRow[] = data.map((row, i) => {
@@ -186,20 +216,22 @@ export function ImportWizard() {
         const originalAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(',', '.'));
         const type = inferTransactionType(rawType, originalAmount);
         const description = cleanDescription(String(rawDesc || '').trim());
-        const category = normalizeCategory(rawCat || undefined, type, description);
+        const learnedCat = findLearnedCategory(description, userMappings);
+        const category = learnedCat || normalizeCategory(rawCat || undefined, type, description);
         const date = normalizeToLocalDate(rawDate);
 
-        return { type, amount, category, description, date };
+        return { type, amount, category, description, date, isLearnedCategory: !!learnedCat };
       } catch {
         return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Erro` };
       }
     }).filter(r => !r.error && r.amount > 0);
 
     setTotalParsed(normalized.length);
-    const withDuplicates = detectDuplicates(normalized, transactions);
+    const withDuplicates = detectDuplicates(normalized as any, transactions);
+    originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
     setImportRows(withDuplicates);
     setStep('duplicates');
-  }, [transactions]);
+  }, [transactions, userMappings]);
 
   const handleMappingConfirm = useCallback(() => {
     processSpreadsheetData(rawData, mapping);
@@ -232,6 +264,11 @@ export function ImportWizard() {
         duplicate_records: counts.duplicate,
         skipped_records: totalParsed - count,
       });
+
+      // Save learned mappings
+      await saveLearnedMappings(user.id, originalRowsRef.current, importRows);
+      // Refresh mappings
+      getUserCategoryMappings(user.id).then(setUserMappings);
 
       toast({ title: `✅ ${count} transações importadas com sucesso!` });
       reset();

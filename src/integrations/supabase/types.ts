@@ -38,6 +38,36 @@ export type Database = {
         }
         Relationships: []
       }
+      category_mappings: {
+        Row: {
+          category: string
+          created_at: string
+          description_pattern: string
+          id: string
+          updated_at: string
+          usage_count: number
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description_pattern: string
+          id?: string
+          updated_at?: string
+          usage_count?: number
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description_pattern?: string
+          id?: string
+          updated_at?: string
+          usage_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
