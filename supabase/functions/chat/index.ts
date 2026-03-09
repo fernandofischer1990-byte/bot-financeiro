@@ -153,6 +153,7 @@ serve(async (req) => {
 - Saldo atual: R$ ${context?.balance?.toFixed(2) || '0.00'}
 - Total de receitas: R$ ${context?.income?.toFixed(2) || '0.00'}
 - Total de despesas: R$ ${context?.expenses?.toFixed(2) || '0.00'}
+- Top categorias de despesas: ${context?.top_spending_categories ? Object.entries(context.top_spending_categories).map(([cat, val]) => `${cat} (R$ ${Number(val).toFixed(2)})`).join(', ') : 'Nenhuma'}
 - Data de hoje: ${new Date().toISOString().split('T')[0]}`;
 
     if (context?.recentTransactions && Array.isArray(context.recentTransactions)) {
