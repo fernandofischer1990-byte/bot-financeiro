@@ -214,21 +214,42 @@ export function ImportWizard() {
   }, [transactions, toast, reset, userMappings]);
 
   const processSpreadsheetData = useCallback((data: Record<string, unknown>[], map: ColumnMapping) => {
+    const useSplitMode = map.income !== '' || map.expense !== '';
+
     const normalized: NormalizedTransactionRow[] = data.map((row, i) => {
       try {
-        const rawAmount = map.amount ? row[map.amount] : 0;
         const rawDate = map.date ? row[map.date] : '';
         const rawDesc = map.description ? row[map.description] : '';
-        const rawType = map.type ? row[map.type] : '';
         const rawCat = map.category ? row[map.category] : '';
 
-        const amount = normalizeAmount(rawAmount);
-        if (!amount || amount === 0) {
-          return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Valor inválido` };
+        let amount: number;
+        let type: 'income' | 'expense';
+
+        if (useSplitMode) {
+          const rawIncome = map.income ? normalizeAmount(row[map.income]) : 0;
+          const rawExpense = map.expense ? normalizeAmount(row[map.expense]) : 0;
+
+          if (rawIncome && rawIncome > 0) {
+            type = 'income';
+            amount = rawIncome;
+          } else if (rawExpense && rawExpense > 0) {
+            type = 'expense';
+            amount = rawExpense;
+          } else {
+            // Both empty → skip
+            return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Sem valor` };
+          }
+        } else {
+          const rawAmount = map.amount ? row[map.amount] : 0;
+          amount = normalizeAmount(rawAmount);
+          if (!amount || amount === 0) {
+            return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Valor inválido` };
+          }
+          const rawType = map.type ? row[map.type] : '';
+          const originalAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(',', '.'));
+          type = inferTransactionType(rawType, originalAmount);
         }
 
-        const originalAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(',', '.'));
-        const type = inferTransactionType(rawType, originalAmount);
         const description = cleanDescription(String(rawDesc || '').trim());
         const learnedCat = findLearnedCategory(description, userMappings);
         const category = learnedCat || normalizeCategory(rawCat || undefined, type, description);
