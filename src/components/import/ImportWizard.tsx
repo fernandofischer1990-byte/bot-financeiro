@@ -26,17 +26,29 @@ import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, Cate
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
 // Auto-detect column mapping from source columns
+const BALANCE_ALIASES = ['total', 'saldo', 'balance', 'running balance'];
+
 function autoDetectMapping(columns: string[]): ColumnMapping {
-  const mapping: ColumnMapping = { date: '', amount: '', description: '', type: '', category: '' };
-  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const mapping: ColumnMapping = { date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' };
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
   for (const col of columns) {
     const n = norm(col);
-    if (!mapping.date && ['data', 'date', 'dt'].includes(n)) mapping.date = col;
+    // Skip balance columns entirely
+    if (BALANCE_ALIASES.includes(n)) continue;
+
+    if (!mapping.date && ['data', 'date', 'dt', 'transaction date'].includes(n)) mapping.date = col;
+    else if (!mapping.income && ['receita', 'credit', 'income', 'entrada'].includes(n)) mapping.income = col;
+    else if (!mapping.expense && ['despesa', 'debit', 'expense', 'saida', 'saída'].includes(n)) mapping.expense = col;
     else if (!mapping.amount && ['valor', 'amount', 'value', 'montante', 'quantia'].includes(n)) mapping.amount = col;
-    else if (!mapping.description && ['descricao', 'description', 'desc', 'historico'].includes(n)) mapping.description = col;
+    else if (!mapping.description && ['descricao', 'description', 'desc', 'historico', 'histórico', 'detalhes', 'memo'].includes(n)) mapping.description = col;
     else if (!mapping.type && ['tipo', 'type'].includes(n)) mapping.type = col;
     else if (!mapping.category && ['categoria', 'category'].includes(n)) mapping.category = col;
+  }
+
+  // If both income and expense detected, clear amount to use split mode
+  if (mapping.income && mapping.expense) {
+    mapping.amount = '';
   }
 
   return mapping;
@@ -48,7 +60,7 @@ export function ImportWizard() {
   const [fileFormat, setFileFormat] = useState('');
   const [rawData, setRawData] = useState<Record<string, unknown>[]>([]);
   const [sourceColumns, setSourceColumns] = useState<string[]>([]);
-  const [mapping, setMapping] = useState<ColumnMapping>({ date: '', amount: '', description: '', type: '', category: '' });
+  const [mapping, setMapping] = useState<ColumnMapping>({ date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' });
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [totalParsed, setTotalParsed] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
@@ -71,7 +83,7 @@ export function ImportWizard() {
     setFileFormat('');
     setRawData([]);
     setSourceColumns([]);
-    setMapping({ date: '', amount: '', description: '', type: '', category: '' });
+    setMapping({ date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' });
     setImportRows([]);
     setTotalParsed(0);
     setIsImporting(false);
@@ -184,7 +196,9 @@ export function ImportWizard() {
         setMapping(detected);
 
         // If required columns detected, skip mapping
-        if (detected.date && detected.amount) {
+        const hasAmount = detected.amount !== '';
+        const hasSplit = detected.income !== '' || detected.expense !== '';
+        if (detected.date && (hasAmount || hasSplit)) {
           processSpreadsheetData(data, detected);
         } else {
           setStep('mapping');
@@ -200,21 +214,42 @@ export function ImportWizard() {
   }, [transactions, toast, reset, userMappings]);
 
   const processSpreadsheetData = useCallback((data: Record<string, unknown>[], map: ColumnMapping) => {
+    const useSplitMode = map.income !== '' || map.expense !== '';
+
     const normalized: NormalizedTransactionRow[] = data.map((row, i) => {
       try {
-        const rawAmount = map.amount ? row[map.amount] : 0;
         const rawDate = map.date ? row[map.date] : '';
         const rawDesc = map.description ? row[map.description] : '';
-        const rawType = map.type ? row[map.type] : '';
         const rawCat = map.category ? row[map.category] : '';
 
-        const amount = normalizeAmount(rawAmount);
-        if (!amount || amount === 0) {
-          return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Valor inválido` };
+        let amount: number;
+        let type: 'income' | 'expense';
+
+        if (useSplitMode) {
+          const rawIncome = map.income ? normalizeAmount(row[map.income]) : 0;
+          const rawExpense = map.expense ? normalizeAmount(row[map.expense]) : 0;
+
+          if (rawIncome && rawIncome > 0) {
+            type = 'income';
+            amount = rawIncome;
+          } else if (rawExpense && rawExpense > 0) {
+            type = 'expense';
+            amount = rawExpense;
+          } else {
+            // Both empty → skip
+            return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Sem valor` };
+          }
+        } else {
+          const rawAmount = map.amount ? row[map.amount] : 0;
+          amount = normalizeAmount(rawAmount);
+          if (!amount || amount === 0) {
+            return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Valor inválido` };
+          }
+          const rawType = map.type ? row[map.type] : '';
+          const originalAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(',', '.'));
+          type = inferTransactionType(rawType, originalAmount);
         }
 
-        const originalAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(',', '.'));
-        const type = inferTransactionType(rawType, originalAmount);
         const description = cleanDescription(String(rawDesc || '').trim());
         const learnedCat = findLearnedCategory(description, userMappings);
         const category = learnedCat || normalizeCategory(rawCat || undefined, type, description);
