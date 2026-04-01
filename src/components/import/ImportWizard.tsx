@@ -196,7 +196,9 @@ export function ImportWizard() {
         setMapping(detected);
 
         // If required columns detected, skip mapping
-        if (detected.date && detected.amount) {
+        const hasAmount = detected.amount !== '';
+        const hasSplit = detected.income !== '' || detected.expense !== '';
+        if (detected.date && (hasAmount || hasSplit)) {
           processSpreadsheetData(data, detected);
         } else {
           setStep('mapping');
