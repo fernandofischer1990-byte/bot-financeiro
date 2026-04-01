@@ -83,7 +83,7 @@ export function ImportWizard() {
     setFileFormat('');
     setRawData([]);
     setSourceColumns([]);
-    setMapping({ date: '', amount: '', description: '', type: '', category: '' });
+    setMapping({ date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' });
     setImportRows([]);
     setTotalParsed(0);
     setIsImporting(false);
