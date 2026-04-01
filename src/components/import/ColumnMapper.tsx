@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { CheckCircle, AlertTriangle, Info, Save, Trash2, FolderOpen } from 'lucide-react';
+import { MappingTemplate } from '@/services/mappingTemplateService';
 
 export interface ColumnMapping {
   date: string;
@@ -34,6 +36,10 @@ interface ColumnMapperProps {
   onMappingChange: (mapping: ColumnMapping) => void;
   onConfirm: () => void;
   onBack: () => void;
+  templates: MappingTemplate[];
+  onSaveTemplate: (name: string) => void;
+  onDeleteTemplate: (id: string) => void;
+  onLoadTemplate: (template: MappingTemplate) => void;
 }
 
 export function ColumnMapper({
@@ -43,7 +49,14 @@ export function ColumnMapper({
   onMappingChange,
   onConfirm,
   onBack,
+  templates,
+  onSaveTemplate,
+  onDeleteTemplate,
+  onLoadTemplate,
 }: ColumnMapperProps) {
+  const [templateName, setTemplateName] = useState('');
+  const [showSave, setShowSave] = useState(false);
+
   const hasSplitColumns = mapping.income !== '' && mapping.expense !== '';
   const isValid = mapping.date !== '' && (mapping.amount !== '' || mapping.income !== '' || mapping.expense !== '');
 
@@ -54,15 +67,71 @@ export function ColumnMapper({
   const previewRows = useMemo(() => sampleData.slice(0, 3), [sampleData]);
 
   const visibleFields = TARGET_FIELDS.filter(field => {
-    // Hide amount when split columns are detected
     if (field.key === 'amount' && hasSplitColumns) return false;
-    // Hide type when split columns handle it
     if (field.key === 'type' && hasSplitColumns) return false;
     return true;
   });
 
+  const handleSave = () => {
+    if (templateName.trim()) {
+      onSaveTemplate(templateName.trim());
+      setTemplateName('');
+      setShowSave(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Template toolbar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {templates.length > 0 && (
+          <Select onValueChange={(id) => {
+            const t = templates.find(t => t.id === id);
+            if (t) onLoadTemplate(t);
+          }}>
+            <SelectTrigger className="w-48 h-8 text-xs">
+              <FolderOpen className="h-3 w-3 mr-1" />
+              <SelectValue placeholder="Carregar template..." />
+            </SelectTrigger>
+            <SelectContent>
+              {templates.map(t => (
+                <div key={t.id} className="flex items-center justify-between pr-1">
+                  <SelectItem value={t.id} className="flex-1 text-xs">{t.name}</SelectItem>
+                  <button
+                    className="p-1 hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); onDeleteTemplate(t.id); }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {showSave ? (
+          <div className="flex items-center gap-1">
+            <Input
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+              placeholder="Nome do template..."
+              className="h-8 w-44 text-xs"
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+            />
+            <Button size="sm" variant="outline" className="h-8 px-2" onClick={handleSave} disabled={!templateName.trim()}>
+              <Save className="h-3 w-3" />
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setShowSave(false)}>
+              Cancelar
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowSave(true)}>
+            <Save className="h-3 w-3 mr-1" /> Salvar template
+          </Button>
+        )}
+      </div>
+
       <div>
         <h3 className="text-sm font-semibold mb-1">Mapeamento de Colunas</h3>
         <p className="text-xs text-muted-foreground">
