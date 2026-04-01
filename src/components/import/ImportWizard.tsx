@@ -60,7 +60,7 @@ export function ImportWizard() {
   const [fileFormat, setFileFormat] = useState('');
   const [rawData, setRawData] = useState<Record<string, unknown>[]>([]);
   const [sourceColumns, setSourceColumns] = useState<string[]>([]);
-  const [mapping, setMapping] = useState<ColumnMapping>({ date: '', amount: '', description: '', type: '', category: '' });
+  const [mapping, setMapping] = useState<ColumnMapping>({ date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' });
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [totalParsed, setTotalParsed] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
