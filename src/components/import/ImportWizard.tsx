@@ -366,6 +366,26 @@ export function ImportWizard() {
               onMappingChange={setMapping}
               onConfirm={handleMappingConfirm}
               onBack={reset}
+              templates={templates}
+              onSaveTemplate={async (name) => {
+                if (!user) return;
+                const ok = await saveMappingTemplate(user.id, name, mapping);
+                if (ok) {
+                  toast({ title: `Template "${name}" salvo!` });
+                  fetchMappingTemplates(user.id).then(setTemplates);
+                }
+              }}
+              onDeleteTemplate={async (id) => {
+                const ok = await deleteMappingTemplate(id);
+                if (ok && user) {
+                  toast({ title: 'Template removido' });
+                  fetchMappingTemplates(user.id).then(setTemplates);
+                }
+              }}
+              onLoadTemplate={(t) => {
+                setMapping(t.mapping);
+                toast({ title: `Template "${t.name}" carregado` });
+              }}
             />
           )}
 
