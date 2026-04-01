@@ -26,17 +26,29 @@ import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, Cate
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
 // Auto-detect column mapping from source columns
+const BALANCE_ALIASES = ['total', 'saldo', 'balance', 'running balance'];
+
 function autoDetectMapping(columns: string[]): ColumnMapping {
-  const mapping: ColumnMapping = { date: '', amount: '', description: '', type: '', category: '' };
-  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const mapping: ColumnMapping = { date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' };
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
   for (const col of columns) {
     const n = norm(col);
-    if (!mapping.date && ['data', 'date', 'dt'].includes(n)) mapping.date = col;
+    // Skip balance columns entirely
+    if (BALANCE_ALIASES.includes(n)) continue;
+
+    if (!mapping.date && ['data', 'date', 'dt', 'transaction date'].includes(n)) mapping.date = col;
+    else if (!mapping.income && ['receita', 'credit', 'income', 'entrada'].includes(n)) mapping.income = col;
+    else if (!mapping.expense && ['despesa', 'debit', 'expense', 'saida', 'saída'].includes(n)) mapping.expense = col;
     else if (!mapping.amount && ['valor', 'amount', 'value', 'montante', 'quantia'].includes(n)) mapping.amount = col;
-    else if (!mapping.description && ['descricao', 'description', 'desc', 'historico'].includes(n)) mapping.description = col;
+    else if (!mapping.description && ['descricao', 'description', 'desc', 'historico', 'histórico', 'detalhes', 'memo'].includes(n)) mapping.description = col;
     else if (!mapping.type && ['tipo', 'type'].includes(n)) mapping.type = col;
     else if (!mapping.category && ['categoria', 'category'].includes(n)) mapping.category = col;
+  }
+
+  // If both income and expense detected, clear amount to use split mode
+  if (mapping.income && mapping.expense) {
+    mapping.amount = '';
   }
 
   return mapping;
