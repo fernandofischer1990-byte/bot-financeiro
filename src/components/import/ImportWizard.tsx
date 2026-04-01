@@ -76,6 +76,7 @@ export function ImportWizard() {
   useEffect(() => {
     if (user) {
       getUserCategoryMappings(user.id).then(setUserMappings);
+      fetchMappingTemplates(user.id).then(setTemplates);
     }
   }, [user]);
 
