@@ -406,43 +406,71 @@ export function ImportWizard() {
           )}
 
           {step === 'mapping' && (
-            <ColumnMapper
-              sourceColumns={sourceColumns}
-              sampleData={rawData}
-              mapping={mapping}
-              onMappingChange={setMapping}
-              onConfirm={handleMappingConfirm}
-              onBack={reset}
-              templates={templates}
-              onSaveTemplate={async (name) => {
-                if (!user) return;
-                const ok = await saveMappingTemplate(user.id, name, mapping);
-                if (ok) {
-                  toast({ title: `Template "${name}" salvo!` });
-                  fetchMappingTemplates(user.id).then(setTemplates);
-                }
-              }}
-              onDeleteTemplate={async (id) => {
-                const ok = await deleteMappingTemplate(id);
-                if (ok && user) {
-                  toast({ title: 'Template removido' });
-                  fetchMappingTemplates(user.id).then(setTemplates);
-                }
-              }}
-              onLoadTemplate={(t) => {
-                setMapping(t.mapping);
-                toast({ title: `Template "${t.name}" carregado` });
-              }}
-            />
+            <div className="space-y-4">
+              {isFallbackMapping && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Não foi possível detectar a estrutura do arquivo automaticamente. Mapeie as colunas manualmente.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <ColumnMapper
+                sourceColumns={sourceColumns}
+                sampleData={rawData}
+                mapping={mapping}
+                onMappingChange={setMapping}
+                onConfirm={handleMappingConfirm}
+                onBack={reset}
+                templates={templates}
+                onSaveTemplate={async (name) => {
+                  if (!user) return;
+                  const ok = await saveMappingTemplate(user.id, name, mapping);
+                  if (ok) {
+                    toast({ title: `Template "${name}" salvo!` });
+                    fetchMappingTemplates(user.id).then(setTemplates);
+                  }
+                }}
+                onDeleteTemplate={async (id) => {
+                  const ok = await deleteMappingTemplate(id);
+                  if (ok && user) {
+                    toast({ title: 'Template removido' });
+                    fetchMappingTemplates(user.id).then(setTemplates);
+                  }
+                }}
+                onLoadTemplate={(t) => {
+                  setMapping(t.mapping);
+                  toast({ title: `Template "${t.name}" carregado` });
+                }}
+              />
+            </div>
           )}
 
           {step === 'duplicates' && (
-            <DuplicateReview
-              rows={importRows}
-              onRowsChange={setImportRows}
-              onConfirm={() => setStep('review')}
-              onBack={reset}
-            />
+            <div className="space-y-3">
+              {detectionInfo && (
+                <Alert className="border-primary/20 bg-primary/5">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  <AlertDescription className="text-sm">
+                    {detectionInfo.detectedStructure === 'split'
+                      ? 'Colunas de Receita e Despesa detectadas — classificação automática aplicada.'
+                      : detectionInfo.detectedStructure === 'single'
+                        ? 'Coluna de valor único detectada — tipo inferido pelo sinal (+/-).'
+                        : 'Estrutura do arquivo detectada automaticamente.'}
+                    {detectionInfo.warnings.length > 0 && (
+                      <span className="block mt-1 text-xs text-muted-foreground">
+                        {detectionInfo.warnings.join(' • ')}
+                      </span>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+              <DuplicateReview
+                rows={importRows}
+                onRowsChange={setImportRows}
+                onConfirm={() => setStep('review')}
+                onBack={reset}
+              />
           )}
 
           {step === 'review' && (
