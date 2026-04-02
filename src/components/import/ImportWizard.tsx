@@ -105,6 +105,8 @@ export function ImportWizard() {
   const [isImporting, setIsImporting] = useState(false);
   const [userMappings, setUserMappings] = useState<CategoryMapping[]>([]);
   const [templates, setTemplates] = useState<MappingTemplate[]>([]);
+  const [detectionInfo, setDetectionInfo] = useState<DetectionResult | null>(null);
+  const [isFallbackMapping, setIsFallbackMapping] = useState(false);
   const originalRowsRef = useRef<ImportRow[]>([]);
 
   const { transactions, addMultipleTransactions } = useTransactionsContext();
