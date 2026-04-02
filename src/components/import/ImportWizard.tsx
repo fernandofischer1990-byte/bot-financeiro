@@ -471,6 +471,7 @@ export function ImportWizard() {
                 onConfirm={() => setStep('review')}
                 onBack={reset}
               />
+            </div>
           )}
 
           {step === 'review' && (
