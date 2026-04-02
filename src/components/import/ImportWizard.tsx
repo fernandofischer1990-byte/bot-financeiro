@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransactionsContext, TransactionInput } from '@/contexts/TransactionsContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { read, utils } from 'xlsx';
 
 import { FileDropZone } from './FileDropZone';
@@ -26,25 +27,48 @@ import { fetchMappingTemplates, saveMappingTemplate, deleteMappingTemplate, Mapp
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
+interface DetectionResult {
+  mapping: ColumnMapping;
+  confidence: number;
+  detectedStructure: 'split' | 'single' | 'unknown';
+  warnings: string[];
+}
+
 // Auto-detect column mapping from source columns
 const BALANCE_ALIASES = ['total', 'saldo', 'balance', 'running balance'];
 
-function autoDetectMapping(columns: string[]): ColumnMapping {
+const DATE_ALIASES = ['data', 'date', 'dt', 'transaction date', 'data transacao', 'data da transacao'];
+const INCOME_ALIASES = ['receita', 'credit', 'income', 'entrada', 'credito', 'deposito'];
+const EXPENSE_ALIASES = ['despesa', 'debit', 'expense', 'saida', 'saída', 'debito'];
+const AMOUNT_ALIASES = ['valor', 'amount', 'value', 'montante', 'quantia'];
+const DESC_ALIASES = ['descricao', 'description', 'desc', 'historico', 'histórico', 'detalhes', 'memo', 'lancamento'];
+const TYPE_ALIASES = ['tipo', 'type'];
+const CATEGORY_ALIASES = ['categoria', 'category'];
+
+function autoDetectWithConfidence(columns: string[]): DetectionResult {
   const mapping: ColumnMapping = { date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' };
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const warnings: string[] = [];
+  const ignoredBalanceCols: string[] = [];
 
   for (const col of columns) {
     const n = norm(col);
-    // Skip balance columns entirely
-    if (BALANCE_ALIASES.includes(n)) continue;
+    if (BALANCE_ALIASES.includes(n)) {
+      ignoredBalanceCols.push(col);
+      continue;
+    }
 
-    if (!mapping.date && ['data', 'date', 'dt', 'transaction date'].includes(n)) mapping.date = col;
-    else if (!mapping.income && ['receita', 'credit', 'income', 'entrada'].includes(n)) mapping.income = col;
-    else if (!mapping.expense && ['despesa', 'debit', 'expense', 'saida', 'saída'].includes(n)) mapping.expense = col;
-    else if (!mapping.amount && ['valor', 'amount', 'value', 'montante', 'quantia'].includes(n)) mapping.amount = col;
-    else if (!mapping.description && ['descricao', 'description', 'desc', 'historico', 'histórico', 'detalhes', 'memo'].includes(n)) mapping.description = col;
-    else if (!mapping.type && ['tipo', 'type'].includes(n)) mapping.type = col;
-    else if (!mapping.category && ['categoria', 'category'].includes(n)) mapping.category = col;
+    if (!mapping.date && DATE_ALIASES.includes(n)) mapping.date = col;
+    else if (!mapping.income && INCOME_ALIASES.includes(n)) mapping.income = col;
+    else if (!mapping.expense && EXPENSE_ALIASES.includes(n)) mapping.expense = col;
+    else if (!mapping.amount && AMOUNT_ALIASES.includes(n)) mapping.amount = col;
+    else if (!mapping.description && DESC_ALIASES.includes(n)) mapping.description = col;
+    else if (!mapping.type && TYPE_ALIASES.includes(n)) mapping.type = col;
+    else if (!mapping.category && CATEGORY_ALIASES.includes(n)) mapping.category = col;
+  }
+
+  if (ignoredBalanceCols.length > 0) {
+    warnings.push(`Coluna "${ignoredBalanceCols.join(', ')}" detectada como saldo e ignorada`);
   }
 
   // If both income and expense detected, clear amount to use split mode
@@ -52,7 +76,21 @@ function autoDetectMapping(columns: string[]): ColumnMapping {
     mapping.amount = '';
   }
 
-  return mapping;
+  // Calculate confidence
+  let confidence = 0;
+  const hasDate = mapping.date !== '';
+  const hasAmount = mapping.amount !== '';
+  const hasSplit = mapping.income !== '' || mapping.expense !== '';
+
+  if (hasDate) confidence += 50;
+  if (hasAmount || hasSplit) confidence += 40;
+  if (mapping.description) confidence += 10;
+
+  let detectedStructure: 'split' | 'single' | 'unknown' = 'unknown';
+  if (hasSplit) detectedStructure = 'split';
+  else if (hasAmount) detectedStructure = 'single';
+
+  return { mapping, confidence, detectedStructure, warnings };
 }
 
 export function ImportWizard() {
@@ -67,6 +105,8 @@ export function ImportWizard() {
   const [isImporting, setIsImporting] = useState(false);
   const [userMappings, setUserMappings] = useState<CategoryMapping[]>([]);
   const [templates, setTemplates] = useState<MappingTemplate[]>([]);
+  const [detectionInfo, setDetectionInfo] = useState<DetectionResult | null>(null);
+  const [isFallbackMapping, setIsFallbackMapping] = useState(false);
   const originalRowsRef = useRef<ImportRow[]>([]);
 
   const { transactions, addMultipleTransactions } = useTransactionsContext();
@@ -90,6 +130,8 @@ export function ImportWizard() {
     setImportRows([]);
     setTotalParsed(0);
     setIsImporting(false);
+    setDetectionInfo(null);
+    setIsFallbackMapping(false);
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
@@ -195,15 +237,14 @@ export function ImportWizard() {
         setRawData(data);
         setSourceColumns(columns);
 
-        const detected = autoDetectMapping(columns);
-        setMapping(detected);
+        const detection = autoDetectWithConfidence(columns);
+        setMapping(detection.mapping);
+        setDetectionInfo(detection);
 
-        // If required columns detected, skip mapping
-        const hasAmount = detected.amount !== '';
-        const hasSplit = detected.income !== '' || detected.expense !== '';
-        if (detected.date && (hasAmount || hasSplit)) {
-          processSpreadsheetData(data, detected);
+        if (detection.confidence >= 70) {
+          processSpreadsheetData(data, detection.mapping);
         } else {
+          setIsFallbackMapping(true);
           setStep('mapping');
         }
       } catch (error) {
@@ -323,27 +364,33 @@ export function ImportWizard() {
             <FileSpreadsheet className="h-5 w-5" />
             Importar Transações
           </CardTitle>
-          {step !== 'upload' && step !== 'loading' && (
-            <div className="flex items-center gap-1 mt-2">
-              {['upload', 'mapping', 'duplicates', 'review', 'summary'].map((s, i) => {
-                const steps = ['upload', 'mapping', 'duplicates', 'review', 'summary'];
-                const currentIdx = steps.indexOf(step);
-                const isActive = i <= currentIdx;
-                const labels = ['Upload', 'Colunas', 'Duplicatas', 'Revisão', 'Confirmar'];
-                return (
-                  <div key={s} className="flex items-center gap-1">
-                    {i > 0 && <div className={`h-px w-4 ${isActive ? 'bg-primary' : 'bg-border'}`} />}
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      i === currentIdx ? 'bg-primary text-primary-foreground' :
-                      isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-                    }`}>
-                      {labels[i]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {step !== 'upload' && step !== 'loading' && (() => {
+            const activeSteps = isFallbackMapping
+              ? ['upload', 'mapping', 'duplicates', 'review', 'summary']
+              : ['upload', 'duplicates', 'review', 'summary'];
+            const activeLabels = isFallbackMapping
+              ? ['Upload', 'Colunas', 'Duplicatas', 'Revisão', 'Confirmar']
+              : ['Upload', 'Duplicatas', 'Revisão', 'Confirmar'];
+            const currentIdx = activeSteps.indexOf(step);
+            return (
+              <div className="flex items-center gap-1 mt-2">
+                {activeSteps.map((s, i) => {
+                  const isActive = i <= currentIdx;
+                  return (
+                    <div key={s} className="flex items-center gap-1">
+                      {i > 0 && <div className={`h-px w-4 ${isActive ? 'bg-primary' : 'bg-border'}`} />}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                        i === currentIdx ? 'bg-primary text-primary-foreground' :
+                        isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {activeLabels[i]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </CardHeader>
         <CardContent>
           {step === 'upload' && (
@@ -359,43 +406,72 @@ export function ImportWizard() {
           )}
 
           {step === 'mapping' && (
-            <ColumnMapper
-              sourceColumns={sourceColumns}
-              sampleData={rawData}
-              mapping={mapping}
-              onMappingChange={setMapping}
-              onConfirm={handleMappingConfirm}
-              onBack={reset}
-              templates={templates}
-              onSaveTemplate={async (name) => {
-                if (!user) return;
-                const ok = await saveMappingTemplate(user.id, name, mapping);
-                if (ok) {
-                  toast({ title: `Template "${name}" salvo!` });
-                  fetchMappingTemplates(user.id).then(setTemplates);
-                }
-              }}
-              onDeleteTemplate={async (id) => {
-                const ok = await deleteMappingTemplate(id);
-                if (ok && user) {
-                  toast({ title: 'Template removido' });
-                  fetchMappingTemplates(user.id).then(setTemplates);
-                }
-              }}
-              onLoadTemplate={(t) => {
-                setMapping(t.mapping);
-                toast({ title: `Template "${t.name}" carregado` });
-              }}
-            />
+            <div className="space-y-4">
+              {isFallbackMapping && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Não foi possível detectar a estrutura do arquivo automaticamente. Mapeie as colunas manualmente.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <ColumnMapper
+                sourceColumns={sourceColumns}
+                sampleData={rawData}
+                mapping={mapping}
+                onMappingChange={setMapping}
+                onConfirm={handleMappingConfirm}
+                onBack={reset}
+                templates={templates}
+                onSaveTemplate={async (name) => {
+                  if (!user) return;
+                  const ok = await saveMappingTemplate(user.id, name, mapping);
+                  if (ok) {
+                    toast({ title: `Template "${name}" salvo!` });
+                    fetchMappingTemplates(user.id).then(setTemplates);
+                  }
+                }}
+                onDeleteTemplate={async (id) => {
+                  const ok = await deleteMappingTemplate(id);
+                  if (ok && user) {
+                    toast({ title: 'Template removido' });
+                    fetchMappingTemplates(user.id).then(setTemplates);
+                  }
+                }}
+                onLoadTemplate={(t) => {
+                  setMapping(t.mapping);
+                  toast({ title: `Template "${t.name}" carregado` });
+                }}
+              />
+            </div>
           )}
 
           {step === 'duplicates' && (
-            <DuplicateReview
-              rows={importRows}
-              onRowsChange={setImportRows}
-              onConfirm={() => setStep('review')}
-              onBack={reset}
-            />
+            <div className="space-y-3">
+              {detectionInfo && (
+                <Alert className="border-primary/20 bg-primary/5">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  <AlertDescription className="text-sm">
+                    {detectionInfo.detectedStructure === 'split'
+                      ? 'Colunas de Receita e Despesa detectadas — classificação automática aplicada.'
+                      : detectionInfo.detectedStructure === 'single'
+                        ? 'Coluna de valor único detectada — tipo inferido pelo sinal (+/-).'
+                        : 'Estrutura do arquivo detectada automaticamente.'}
+                    {detectionInfo.warnings.length > 0 && (
+                      <span className="block mt-1 text-xs text-muted-foreground">
+                        {detectionInfo.warnings.join(' • ')}
+                      </span>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+              <DuplicateReview
+                rows={importRows}
+                onRowsChange={setImportRows}
+                onConfirm={() => setStep('review')}
+                onBack={reset}
+              />
+            </div>
           )}
 
           {step === 'review' && (
