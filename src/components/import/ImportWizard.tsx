@@ -364,27 +364,33 @@ export function ImportWizard() {
             <FileSpreadsheet className="h-5 w-5" />
             Importar Transações
           </CardTitle>
-          {step !== 'upload' && step !== 'loading' && (
-            <div className="flex items-center gap-1 mt-2">
-              {['upload', 'mapping', 'duplicates', 'review', 'summary'].map((s, i) => {
-                const steps = ['upload', 'mapping', 'duplicates', 'review', 'summary'];
-                const currentIdx = steps.indexOf(step);
-                const isActive = i <= currentIdx;
-                const labels = ['Upload', 'Colunas', 'Duplicatas', 'Revisão', 'Confirmar'];
-                return (
-                  <div key={s} className="flex items-center gap-1">
-                    {i > 0 && <div className={`h-px w-4 ${isActive ? 'bg-primary' : 'bg-border'}`} />}
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      i === currentIdx ? 'bg-primary text-primary-foreground' :
-                      isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-                    }`}>
-                      {labels[i]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {step !== 'upload' && step !== 'loading' && (() => {
+            const activeSteps = isFallbackMapping
+              ? ['upload', 'mapping', 'duplicates', 'review', 'summary']
+              : ['upload', 'duplicates', 'review', 'summary'];
+            const activeLabels = isFallbackMapping
+              ? ['Upload', 'Colunas', 'Duplicatas', 'Revisão', 'Confirmar']
+              : ['Upload', 'Duplicatas', 'Revisão', 'Confirmar'];
+            const currentIdx = activeSteps.indexOf(step);
+            return (
+              <div className="flex items-center gap-1 mt-2">
+                {activeSteps.map((s, i) => {
+                  const isActive = i <= currentIdx;
+                  return (
+                    <div key={s} className="flex items-center gap-1">
+                      {i > 0 && <div className={`h-px w-4 ${isActive ? 'bg-primary' : 'bg-border'}`} />}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                        i === currentIdx ? 'bg-primary text-primary-foreground' :
+                        isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {activeLabels[i]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </CardHeader>
         <CardContent>
           {step === 'upload' && (
