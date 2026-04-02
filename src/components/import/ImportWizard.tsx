@@ -130,6 +130,8 @@ export function ImportWizard() {
     setImportRows([]);
     setTotalParsed(0);
     setIsImporting(false);
+    setDetectionInfo(null);
+    setIsFallbackMapping(false);
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
