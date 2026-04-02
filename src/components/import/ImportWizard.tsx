@@ -237,15 +237,14 @@ export function ImportWizard() {
         setRawData(data);
         setSourceColumns(columns);
 
-        const detected = autoDetectMapping(columns);
-        setMapping(detected);
+        const detection = autoDetectWithConfidence(columns);
+        setMapping(detection.mapping);
+        setDetectionInfo(detection);
 
-        // If required columns detected, skip mapping
-        const hasAmount = detected.amount !== '';
-        const hasSplit = detected.income !== '' || detected.expense !== '';
-        if (detected.date && (hasAmount || hasSplit)) {
-          processSpreadsheetData(data, detected);
+        if (detection.confidence >= 70) {
+          processSpreadsheetData(data, detection.mapping);
         } else {
+          setIsFallbackMapping(true);
           setStep('mapping');
         }
       } catch (error) {
