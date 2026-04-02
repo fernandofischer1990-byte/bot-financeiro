@@ -57,7 +57,7 @@ export function ColumnMapper({
   const [templateName, setTemplateName] = useState('');
   const [showSave, setShowSave] = useState(false);
 
-  const hasSplitColumns = mapping.income !== '' && mapping.expense !== '';
+  const hasSplitColumns = mapping.income !== '' || mapping.expense !== '';
   const isValid = mapping.date !== '' && (mapping.amount !== '' || mapping.income !== '' || mapping.expense !== '');
 
   const handleChange = (field: keyof ColumnMapping, value: string) => {
@@ -143,7 +143,11 @@ export function ColumnMapper({
         <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
           <Info className="h-4 w-4 text-primary flex-shrink-0" />
           <span className="text-xs text-primary">
-            Colunas Receita e Despesa detectadas. Transações serão classificadas automaticamente.
+            {mapping.income !== '' && mapping.expense !== ''
+              ? 'Colunas Receita e Despesa detectadas. Transações serão classificadas automaticamente.'
+              : mapping.income !== ''
+                ? 'Coluna de Receita detectada. Transações serão classificadas automaticamente.'
+                : 'Coluna de Despesa detectada. Transações serão classificadas automaticamente.'}
           </span>
         </div>
       )}
