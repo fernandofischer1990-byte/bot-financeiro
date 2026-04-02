@@ -27,25 +27,48 @@ import { fetchMappingTemplates, saveMappingTemplate, deleteMappingTemplate, Mapp
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
+interface DetectionResult {
+  mapping: ColumnMapping;
+  confidence: number;
+  detectedStructure: 'split' | 'single' | 'unknown';
+  warnings: string[];
+}
+
 // Auto-detect column mapping from source columns
 const BALANCE_ALIASES = ['total', 'saldo', 'balance', 'running balance'];
 
-function autoDetectMapping(columns: string[]): ColumnMapping {
+const DATE_ALIASES = ['data', 'date', 'dt', 'transaction date', 'data transacao', 'data da transacao'];
+const INCOME_ALIASES = ['receita', 'credit', 'income', 'entrada', 'credito', 'deposito'];
+const EXPENSE_ALIASES = ['despesa', 'debit', 'expense', 'saida', 'saída', 'debito'];
+const AMOUNT_ALIASES = ['valor', 'amount', 'value', 'montante', 'quantia'];
+const DESC_ALIASES = ['descricao', 'description', 'desc', 'historico', 'histórico', 'detalhes', 'memo', 'lancamento'];
+const TYPE_ALIASES = ['tipo', 'type'];
+const CATEGORY_ALIASES = ['categoria', 'category'];
+
+function autoDetectWithConfidence(columns: string[]): DetectionResult {
   const mapping: ColumnMapping = { date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' };
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const warnings: string[] = [];
+  const ignoredBalanceCols: string[] = [];
 
   for (const col of columns) {
     const n = norm(col);
-    // Skip balance columns entirely
-    if (BALANCE_ALIASES.includes(n)) continue;
+    if (BALANCE_ALIASES.includes(n)) {
+      ignoredBalanceCols.push(col);
+      continue;
+    }
 
-    if (!mapping.date && ['data', 'date', 'dt', 'transaction date'].includes(n)) mapping.date = col;
-    else if (!mapping.income && ['receita', 'credit', 'income', 'entrada'].includes(n)) mapping.income = col;
-    else if (!mapping.expense && ['despesa', 'debit', 'expense', 'saida', 'saída'].includes(n)) mapping.expense = col;
-    else if (!mapping.amount && ['valor', 'amount', 'value', 'montante', 'quantia'].includes(n)) mapping.amount = col;
-    else if (!mapping.description && ['descricao', 'description', 'desc', 'historico', 'histórico', 'detalhes', 'memo'].includes(n)) mapping.description = col;
-    else if (!mapping.type && ['tipo', 'type'].includes(n)) mapping.type = col;
-    else if (!mapping.category && ['categoria', 'category'].includes(n)) mapping.category = col;
+    if (!mapping.date && DATE_ALIASES.includes(n)) mapping.date = col;
+    else if (!mapping.income && INCOME_ALIASES.includes(n)) mapping.income = col;
+    else if (!mapping.expense && EXPENSE_ALIASES.includes(n)) mapping.expense = col;
+    else if (!mapping.amount && AMOUNT_ALIASES.includes(n)) mapping.amount = col;
+    else if (!mapping.description && DESC_ALIASES.includes(n)) mapping.description = col;
+    else if (!mapping.type && TYPE_ALIASES.includes(n)) mapping.type = col;
+    else if (!mapping.category && CATEGORY_ALIASES.includes(n)) mapping.category = col;
+  }
+
+  if (ignoredBalanceCols.length > 0) {
+    warnings.push(`Coluna "${ignoredBalanceCols.join(', ')}" detectada como saldo e ignorada`);
   }
 
   // If both income and expense detected, clear amount to use split mode
@@ -53,7 +76,21 @@ function autoDetectMapping(columns: string[]): ColumnMapping {
     mapping.amount = '';
   }
 
-  return mapping;
+  // Calculate confidence
+  let confidence = 0;
+  const hasDate = mapping.date !== '';
+  const hasAmount = mapping.amount !== '';
+  const hasSplit = mapping.income !== '' || mapping.expense !== '';
+
+  if (hasDate) confidence += 50;
+  if (hasAmount || hasSplit) confidence += 40;
+  if (mapping.description) confidence += 10;
+
+  let detectedStructure: 'split' | 'single' | 'unknown' = 'unknown';
+  if (hasSplit) detectedStructure = 'split';
+  else if (hasAmount) detectedStructure = 'single';
+
+  return { mapping, confidence, detectedStructure, warnings };
 }
 
 export function ImportWizard() {
