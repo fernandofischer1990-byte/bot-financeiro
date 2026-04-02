@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransactionsContext, TransactionInput } from '@/contexts/TransactionsContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { read, utils } from 'xlsx';
 
 import { FileDropZone } from './FileDropZone';
