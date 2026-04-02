@@ -57,7 +57,7 @@ export function ColumnMapper({
   const [templateName, setTemplateName] = useState('');
   const [showSave, setShowSave] = useState(false);
 
-  const hasSplitColumns = mapping.income !== '' && mapping.expense !== '';
+  const hasSplitColumns = mapping.income !== '' || mapping.expense !== '';
   const isValid = mapping.date !== '' && (mapping.amount !== '' || mapping.income !== '' || mapping.expense !== '');
 
   const handleChange = (field: keyof ColumnMapping, value: string) => {
