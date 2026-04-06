@@ -163,13 +163,11 @@ export function inferTransactionType(
     }
   }
   
-  // If amount is negative, it's likely an expense
-  // Note: we always store positive amounts, the type determines direction
-  if (typeof amount === 'number' && amount < 0) {
-    return 'expense';
-  }
+  // Infer from amount sign
+  if (typeof amount === 'number' && amount < 0) return 'expense';
+  if (typeof amount === 'number' && amount > 0) return 'income';
   
-  // Default to expense (safer assumption for financial tracking)
+  // Default to expense (zero or NaN fallback)
   return 'expense';
 }
 

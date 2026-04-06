@@ -292,7 +292,17 @@ export function ImportWizard() {
             return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Valor inválido` };
           }
           const rawType = map.type ? row[map.type] : '';
-          const originalAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(',', '.'));
+          const originalAmount = typeof rawAmount === 'number' 
+            ? rawAmount 
+            : (() => {
+                let s = String(rawAmount).replace(/R\$\s*/gi, '').trim();
+                const neg = s.startsWith('-');
+                if (neg) s = s.substring(1);
+                s = s.replace(/\s/g, '');
+                if (s.includes(',')) { s = s.replace(/\./g, '').replace(',', '.'); }
+                const v = parseFloat(s);
+                return isNaN(v) ? 0 : (neg ? -v : v);
+              })();
           type = inferTransactionType(rawType, originalAmount);
         }
 
