@@ -1,53 +1,43 @@
 
 
-## Invisible Import — Zero Manual Mapping
+## Fix: Header Detection Not Matching Accented Aliases
 
-### What changes
+### Root Cause
 
-The current flow already auto-skips the mapping step when columns are detected. The upgrade makes this the **only** path, with manual mapping as a hidden fallback.
+The `autoDetectWithConfidence` function normalizes the input header (removes accents via NFD decomposition) but then compares against alias arrays that still contain accented characters. For example:
 
-### Changes
+- Input column `"Saída"` → normalized to `"saida"` → compared against `EXPENSE_ALIASES` which contains `'saída'` (with accent) → **no match**
+- Same issue with `'histórico'` in `DESC_ALIASES`
 
-#### 1. `src/components/import/ImportWizard.tsx`
+Additionally, the alias lists are missing several common bank header variants for income (e.g., `'receitas'`, `'valor recebido'`).
 
-**Add confidence scoring to `autoDetectMapping`:**
-- Return a `confidence` object alongside the mapping: `{ mapping, confidence, detectedStructure, warnings }`
-- Exact alias match = 100%, partial/fuzzy match = 70%, no match = 0%
-- `detectedStructure`: `'split'` (Receita+Despesa), `'single'` (Valor), or `'unknown'`
-- `warnings[]`: e.g. "Coluna 'Total' detectada e ignorada", "3 linhas ignoradas por valores inválidos"
+### Fix — `src/components/import/ImportWizard.tsx`
 
-**Update flow logic:**
-- If overall confidence >= 70% (date + amount source detected): skip mapping entirely → go straight to preview
-- If confidence < 70%: show fallback mapping UI with a message "Não foi possível detectar a estrutura do arquivo automaticamente"
+1. **Normalize all alias arrays** so they contain only accent-free lowercase strings (matching what `norm()` produces). This ensures the `includes(n)` comparison always works.
 
-**Update step bar:**
-- Remove 'mapping' from the visible steps in the default flow. Steps become: Upload → Duplicatas → Revisão → Confirmar
-- Only show 'Colunas' step if fallback mode is active
+2. **Expand alias lists** with missing variants:
+   - `INCOME_ALIASES`: add `'receitas'`, `'valor recebido'`
+   - `EXPENSE_ALIASES`: add `'despesas'`, `'valor pago'`
+   - `DESC_ALIASES`: add `'lancamentos'`
+   - `DATE_ALIASES`: add `'posted date'`
 
-**Add detection info banner** above the preview (DuplicateReview step):
-- Show detected structure: "Colunas de Receita e Despesa detectadas" or "Coluna de valor único detectada"
-- Show warnings if any (ignored columns, skipped rows)
+3. **Also normalize BALANCE_ALIASES comparison** (already all-lowercase and unaccented, but apply `norm()` for safety).
 
-#### 2. `src/components/import/ImportWizard.tsx` — New types
+4. **Use `.some()` with `norm()` instead of `.includes()`** in the matching loop, so all comparisons are accent-safe:
+   ```ts
+   const match = (aliases: string[], value: string) => 
+     aliases.some(a => norm(a) === value);
+   ```
 
-```typescript
-interface DetectionResult {
-  mapping: ColumnMapping;
-  confidence: number; // 0-100
-  detectedStructure: 'split' | 'single' | 'unknown';
-  warnings: string[];
-}
-```
+### What stays the same
 
-#### 3. No changes to `ColumnMapper.tsx`
-
-It remains as-is — it's the fallback UI. No deletion needed.
+- `ColumnMapper.tsx` — already has `income`/`expense` fields, correct `hasSplitColumns` logic, and proper validation. No changes needed.
+- `processSpreadsheetData` — already handles split mode correctly.
+- No database changes. No new files.
 
 ### File Summary
 
 | File | Change |
 |------|--------|
-| `src/components/import/ImportWizard.tsx` | Add confidence engine to `autoDetectMapping`, skip mapping by default, show detection info, fallback mode |
-
-No database changes. No new files. No new dependencies.
+| `src/components/import/ImportWizard.tsx` | Fix alias matching to normalize both sides, expand alias lists |
 
