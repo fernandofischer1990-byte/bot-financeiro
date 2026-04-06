@@ -37,34 +37,36 @@ interface DetectionResult {
 // Auto-detect column mapping from source columns
 const BALANCE_ALIASES = ['total', 'saldo', 'balance', 'running balance'];
 
-const DATE_ALIASES = ['data', 'date', 'dt', 'transaction date', 'data transacao', 'data da transacao'];
-const INCOME_ALIASES = ['receita', 'credit', 'income', 'entrada', 'credito', 'deposito'];
-const EXPENSE_ALIASES = ['despesa', 'debit', 'expense', 'saida', 'saída', 'debito'];
+const DATE_ALIASES = ['data', 'date', 'dt', 'transaction date', 'data transacao', 'data da transacao', 'posted date'];
+const INCOME_ALIASES = ['receita', 'receitas', 'credit', 'income', 'entrada', 'credito', 'deposito', 'valor recebido'];
+const EXPENSE_ALIASES = ['despesa', 'despesas', 'debit', 'expense', 'saida', 'debito', 'valor pago'];
 const AMOUNT_ALIASES = ['valor', 'amount', 'value', 'montante', 'quantia'];
-const DESC_ALIASES = ['descricao', 'description', 'desc', 'historico', 'histórico', 'detalhes', 'memo', 'lancamento'];
+const DESC_ALIASES = ['descricao', 'description', 'desc', 'historico', 'detalhes', 'memo', 'lancamento', 'lancamentos'];
 const TYPE_ALIASES = ['tipo', 'type'];
 const CATEGORY_ALIASES = ['categoria', 'category'];
 
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+const match = (aliases: string[], value: string) => aliases.some(a => norm(a) === value);
+
 function autoDetectWithConfidence(columns: string[]): DetectionResult {
   const mapping: ColumnMapping = { date: '', amount: '', description: '', type: '', category: '', income: '', expense: '' };
-  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   const warnings: string[] = [];
   const ignoredBalanceCols: string[] = [];
 
   for (const col of columns) {
     const n = norm(col);
-    if (BALANCE_ALIASES.includes(n)) {
+    if (match(BALANCE_ALIASES, n)) {
       ignoredBalanceCols.push(col);
       continue;
     }
 
-    if (!mapping.date && DATE_ALIASES.includes(n)) mapping.date = col;
-    else if (!mapping.income && INCOME_ALIASES.includes(n)) mapping.income = col;
-    else if (!mapping.expense && EXPENSE_ALIASES.includes(n)) mapping.expense = col;
-    else if (!mapping.amount && AMOUNT_ALIASES.includes(n)) mapping.amount = col;
-    else if (!mapping.description && DESC_ALIASES.includes(n)) mapping.description = col;
-    else if (!mapping.type && TYPE_ALIASES.includes(n)) mapping.type = col;
-    else if (!mapping.category && CATEGORY_ALIASES.includes(n)) mapping.category = col;
+    if (!mapping.date && match(DATE_ALIASES, n)) mapping.date = col;
+    else if (!mapping.income && match(INCOME_ALIASES, n)) mapping.income = col;
+    else if (!mapping.expense && match(EXPENSE_ALIASES, n)) mapping.expense = col;
+    else if (!mapping.amount && match(AMOUNT_ALIASES, n)) mapping.amount = col;
+    else if (!mapping.description && match(DESC_ALIASES, n)) mapping.description = col;
+    else if (!mapping.type && match(TYPE_ALIASES, n)) mapping.type = col;
+    else if (!mapping.category && match(CATEGORY_ALIASES, n)) mapping.category = col;
   }
 
   if (ignoredBalanceCols.length > 0) {
