@@ -1,43 +1,67 @@
 
 
-## Fix: Header Detection Not Matching Accented Aliases
+## Fix: Income Detection in Importer
 
 ### Root Cause
 
-The `autoDetectWithConfidence` function normalizes the input header (removes accents via NFD decomposition) but then compares against alias arrays that still contain accented characters. For example:
+The `processSpreadsheetData` function in `ImportWizard.tsx` already has correct split-mode logic (lines 274-297). The issue is in the **single-amount fallback path** (line 296): `inferTransactionType` in `transactionNormalization.ts` defaults to `'expense'` when there's no explicit type indicator and the amount is positive (line 173). This means files with a single "Valor" column where positive = income are misclassified.
 
-- Input column `"Saída"` → normalized to `"saida"` → compared against `EXPENSE_ALIASES` which contains `'saída'` (with accent) → **no match**
-- Same issue with `'histórico'` in `DESC_ALIASES`
+Additionally, `normalizeAmount` always returns `Math.abs()`, stripping the sign. The `originalAmount` variable (line 295) does preserve the sign, but only for simple numeric strings — Brazilian formats like `"-50,00"` aren't handled by the simple `parseFloat(String(rawAmount).replace(',', '.'))`.
 
-Additionally, the alias lists are missing several common bank header variants for income (e.g., `'receitas'`, `'valor recebido'`).
+### Changes
 
-### Fix — `src/components/import/ImportWizard.tsx`
+#### 1. `src/lib/transactionNormalization.ts` — Fix `inferTransactionType`
 
-1. **Normalize all alias arrays** so they contain only accent-free lowercase strings (matching what `norm()` produces). This ensures the `includes(n)` comparison always works.
+Currently line 168-173:
+```ts
+if (typeof amount === 'number' && amount < 0) {
+  return 'expense';
+}
+return 'expense'; // ← always expense
+```
 
-2. **Expand alias lists** with missing variants:
-   - `INCOME_ALIASES`: add `'receitas'`, `'valor recebido'`
-   - `EXPENSE_ALIASES`: add `'despesas'`, `'valor pago'`
-   - `DESC_ALIASES`: add `'lancamentos'`
-   - `DATE_ALIASES`: add `'posted date'`
+Change to properly infer from sign:
+```ts
+if (typeof amount === 'number' && amount < 0) return 'expense';
+if (typeof amount === 'number' && amount > 0) return 'income';
+return 'expense'; // zero or NaN fallback
+```
 
-3. **Also normalize BALANCE_ALIASES comparison** (already all-lowercase and unaccented, but apply `norm()` for safety).
+#### 2. `src/components/import/ImportWizard.tsx` — Fix `originalAmount` parsing
 
-4. **Use `.some()` with `norm()` instead of `.includes()`** in the matching loop, so all comparisons are accent-safe:
-   ```ts
-   const match = (aliases: string[], value: string) => 
-     aliases.some(a => norm(a) === value);
-   ```
+Line 295 uses a naive parse that doesn't handle Brazilian currency. Replace with a proper parser that handles `"-1.234,56"` format:
+
+```ts
+const originalAmount = typeof rawAmount === 'number' 
+  ? rawAmount 
+  : (() => {
+      let s = String(rawAmount).replace(/R\$\s*/gi, '').trim();
+      const neg = s.startsWith('-');
+      if (neg) s = s.substring(1);
+      s = s.replace(/\s/g, '');
+      if (s.includes(',')) { s = s.replace(/\./g, '').replace(',', '.'); }
+      const v = parseFloat(s);
+      return isNaN(v) ? 0 : (neg ? -v : v);
+    })();
+```
+
+#### 3. `src/components/import/ImportReviewTable.tsx` — Color-code income vs expense
+
+Add color styling to the amount display:
+- Income → `text-green-600`
+- Expense → `text-red-600`
 
 ### What stays the same
 
-- `ColumnMapper.tsx` — already has `income`/`expense` fields, correct `hasSplitColumns` logic, and proper validation. No changes needed.
-- `processSpreadsheetData` — already handles split mode correctly.
-- No database changes. No new files.
+- Split-mode logic (income/expense columns) — already works correctly
+- `normalizeAmount` — keeps `Math.abs()` behavior (amount storage is always positive)
+- No database changes, no new files
 
 ### File Summary
 
 | File | Change |
 |------|--------|
-| `src/components/import/ImportWizard.tsx` | Fix alias matching to normalize both sides, expand alias lists |
+| `src/lib/transactionNormalization.ts` | Fix `inferTransactionType` to return `'income'` for positive amounts |
+| `src/components/import/ImportWizard.tsx` | Fix `originalAmount` parsing for Brazilian currency formats |
+| `src/components/import/ImportReviewTable.tsx` | Color-code income (green) vs expense (red) amounts |
 
