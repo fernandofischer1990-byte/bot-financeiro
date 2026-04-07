@@ -1,48 +1,53 @@
 
 
-## Fix: Portuguese Long-Form Date Parsing
+## Fix: Ambiguous Currency Format Parsing
 
 ### Problem
-The uploaded XLSX has dates like `"terça-feira, fevereiro 17, 2026"`. The current `normalizeToLocalDate` in `dateUtils.ts` only handles:
-- ISO format (`2025-01-11`)
-- Brazilian numeric (`11/01/2025`)
-- `new Date()` fallback (English only)
+`normalizeAmount` assumes **Brazilian format** whenever a comma is present: it strips dots (thousands) and converts comma to decimal point. But the test file `teste_2.xlsx` has US-style values like `R$ 4,649.00` where comma=thousands and dot=decimal.
 
-Portuguese month names cause `new Date()` to return `Invalid Date`, so all rows fall back to today's date.
+Result: `R$ 4,649.00` → strips dot → `4,64900` → comma→dot → `4.64900` → **4.65** instead of **4649.00**.
 
-### Fix — `src/lib/dateUtils.ts`
+Dates and income/expense classification are working correctly.
 
-Add a Portuguese month name map and a parser that handles long-form dates before the `new Date()` fallback:
+### Fix — `src/lib/transactionNormalization.ts`
+
+Replace the naive "has comma = Brazilian" logic (lines 69-73) with format detection:
 
 ```typescript
-const PT_MONTHS: Record<string, string> = {
-  janeiro: '01', fevereiro: '02', marco: '03', abril: '04',
-  maio: '05', junho: '06', julho: '07', agosto: '08',
-  setembro: '09', outubro: '10', novembro: '11', dezembro: '12',
-};
+// Detect format by analyzing separator positions
+if (cleaned.includes(',') && cleaned.includes('.')) {
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+  if (lastDot > lastComma) {
+    // US format: 4,649.00 → comma is thousands, dot is decimal
+    cleaned = cleaned.replace(/,/g, '');
+  } else {
+    // BR format: 1.234,56 → dot is thousands, comma is decimal
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  }
+} else if (cleaned.includes(',')) {
+  // Only comma: assume decimal (e.g. "50,00")
+  cleaned = cleaned.replace(',', '.');
+}
+// If only dot: already correct (e.g. "50.00")
 ```
 
-In `normalizeToLocalDate`, before the `new Date()` fallback:
-1. Normalize the string (remove accents, lowercase)
-2. Strip weekday prefix (everything before the first comma+space)
-3. Try to match pattern: `monthName day, year` → extract month from map, build `YYYY-MM-DD`
+Logic: When **both** separators exist, the **last one** is always the decimal separator. This handles both `1.234,56` (BR) and `4,649.00` (US) correctly.
 
-Example flow:
-- Input: `"terça-feira, fevereiro 17, 2026"`
-- Strip weekday: `"fevereiro 17, 2026"`
-- Match: month=`fevereiro`→`02`, day=`17`, year=`2026`
-- Output: `"2026-02-17"`
+Apply the same fix to the `originalAmount` parser in `ImportWizard.tsx` (lines 298-305) which has the same bug.
 
-Also handle `"17 de fevereiro de 2026"` pattern for robustness.
-
-### What stays the same
-- Column auto-detection (already matches Receitas/Despesas/Descrição/Data)
-- Split-mode processing logic
-- No database changes
+### Verification Summary
+- ✅ Dates: All Portuguese long-form dates parsed correctly
+- ✅ Income/Expense: Split columns detected and classified correctly  
+- ❌ Amounts: `R$ 4,649.00` → 4.65 (should be 4649.00)
+- ❌ Amounts: `R$ 1,483.88` → 1.48 (should be 1483.88)
 
 ### File Summary
 
 | File | Change |
 |------|--------|
-| `src/lib/dateUtils.ts` | Add Portuguese month name parsing to `normalizeToLocalDate` |
+| `src/lib/transactionNormalization.ts` | Fix `normalizeAmount` format detection (lines 69-73) |
+| `src/components/import/ImportWizard.tsx` | Fix `originalAmount` parser with same logic |
+
+No database changes.
 
