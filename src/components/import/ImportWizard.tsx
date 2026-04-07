@@ -299,7 +299,13 @@ export function ImportWizard() {
                 const neg = s.startsWith('-');
                 if (neg) s = s.substring(1);
                 s = s.replace(/\s/g, '');
-                if (s.includes(',')) { s = s.replace(/\./g, '').replace(',', '.'); }
+                if (s.includes(',') && s.includes('.')) {
+                  if (s.lastIndexOf('.') > s.lastIndexOf(',')) {
+                    s = s.replace(/,/g, '');
+                  } else {
+                    s = s.replace(/\./g, '').replace(',', '.');
+                  }
+                } else if (s.includes(',')) { s = s.replace(',', '.'); }
                 const v = parseFloat(s);
                 return isNaN(v) ? 0 : (neg ? -v : v);
               })();

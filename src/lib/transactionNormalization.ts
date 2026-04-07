@@ -66,9 +66,18 @@ export function normalizeAmount(value: unknown): number | null {
   // Remove spaces (could be thousand separators like "1 234,56")
   cleaned = cleaned.replace(/\s/g, '');
   
-  // Handle Brazilian format: 1.234,56 -> 1234.56
-  if (cleaned.includes(',')) {
-    cleaned = cleaned.replace(/\./g, '');
+  // Detect format by analyzing separator positions
+  if (cleaned.includes(',') && cleaned.includes('.')) {
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastDot > lastComma) {
+      // US format: 4,649.00
+      cleaned = cleaned.replace(/,/g, '');
+    } else {
+      // BR format: 1.234,56
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    }
+  } else if (cleaned.includes(',')) {
     cleaned = cleaned.replace(',', '.');
   }
   
