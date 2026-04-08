@@ -1,53 +1,76 @@
 
 
-## Fix: Ambiguous Currency Format Parsing
+## Fix: Income Rows Being Silently Filtered Out
 
 ### Problem
-`normalizeAmount` assumes **Brazilian format** whenever a comma is present: it strips dots (thousands) and converts comma to decimal point. But the test file `teste_2.xlsx` has US-style values like `R$ 4,649.00` where comma=thousands and dot=decimal.
 
-Result: `R$ 4,649.00` → strips dot → `4,64900` → comma→dot → `4.64900` → **4.65** instead of **4649.00**.
+The uploaded file has 26 rows (20 expenses + 6 incomes). The importer shows only 20 rows — all expenses. The 6 income rows are silently removed by the `.filter(r => !r.error && r.amount > 0)` at the end of `processSpreadsheetData`. This means income values from the "Receitas" column are returning `null` from `normalizeAmount`.
 
-Dates and income/expense classification are working correctly.
+### Root Cause
 
-### Fix — `src/lib/transactionNormalization.ts`
+Two issues work together:
 
-Replace the naive "has comma = Brazilian" logic (lines 69-73) with format detection:
+1. **`normalizeAmount` silently discards non-number, non-string values** (line 51-53). The xlsx library can return cell values as unexpected types (e.g., `Object`, formatted cell references) depending on how the spreadsheet was authored. Any value that isn't exactly `typeof 'number'` or `typeof 'string'` returns `null` — no fallback.
+
+2. **Split-mode uses truthy checks instead of explicit null checks.** `if (rawIncome && rawIncome > 0)` fails for `null` silently — there's no way to know if the value was genuinely empty or if parsing failed.
+
+### Fix
+
+#### `src/lib/transactionNormalization.ts`
+
+In `normalizeAmount`, instead of returning `null` for non-number/non-string types, coerce to string and continue parsing:
 
 ```typescript
-// Detect format by analyzing separator positions
-if (cleaned.includes(',') && cleaned.includes('.')) {
-  const lastComma = cleaned.lastIndexOf(',');
-  const lastDot = cleaned.lastIndexOf('.');
-  if (lastDot > lastComma) {
-    // US format: 4,649.00 → comma is thousands, dot is decimal
-    cleaned = cleaned.replace(/,/g, '');
-  } else {
-    // BR format: 1.234,56 → dot is thousands, comma is decimal
-    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-  }
-} else if (cleaned.includes(',')) {
-  // Only comma: assume decimal (e.g. "50,00")
-  cleaned = cleaned.replace(',', '.');
+// Before (line 51-53):
+if (typeof value !== 'string') {
+  return null;
 }
-// If only dot: already correct (e.g. "50.00")
+
+// After:
+if (value === null || value === undefined) {
+  return null;
+}
+if (typeof value !== 'string') {
+  // Coerce booleans, objects, etc. to string for parsing
+  value = String(value);
+  if (value === 'undefined' || value === 'null' || value === 'false' || value === 'true') {
+    return null;
+  }
+}
 ```
 
-Logic: When **both** separators exist, the **last one** is always the decimal separator. This handles both `1.234,56` (BR) and `4,649.00` (US) correctly.
+#### `src/components/import/ImportWizard.tsx`
 
-Apply the same fix to the `originalAmount` parser in `ImportWizard.tsx` (lines 298-305) which has the same bug.
+In `processSpreadsheetData`, add defensive row-key lookup and console warnings:
 
-### Verification Summary
-- ✅ Dates: All Portuguese long-form dates parsed correctly
-- ✅ Income/Expense: Split columns detected and classified correctly  
-- ❌ Amounts: `R$ 4,649.00` → 4.65 (should be 4649.00)
-- ❌ Amounts: `R$ 1,483.88` → 1.48 (should be 1483.88)
+1. Add a helper that does case-insensitive key lookup on the row object (in case xlsx normalizes keys differently than the detected column names):
+
+```typescript
+const getRowValue = (row: Record<string, unknown>, key: string): unknown => {
+  if (key in row) return row[key];
+  // Fallback: case-insensitive match
+  const lowerKey = key.toLowerCase();
+  for (const k of Object.keys(row)) {
+    if (k.toLowerCase() === lowerKey) return row[k];
+  }
+  return undefined;
+};
+```
+
+2. Use `getRowValue` instead of direct `row[map.income]` / `row[map.expense]` / `row[map.amount]` access in the processing loop.
+
+3. Add `console.warn` when a row in split mode has both income and expense as null/0, to surface parsing issues during development.
+
+### What stays the same
+
+- Auto-detection logic (aliases, confidence scoring) — already correct
+- ImportReviewTable display — already shows green/red based on type
+- No database changes, no new files
 
 ### File Summary
 
 | File | Change |
 |------|--------|
-| `src/lib/transactionNormalization.ts` | Fix `normalizeAmount` format detection (lines 69-73) |
-| `src/components/import/ImportWizard.tsx` | Fix `originalAmount` parser with same logic |
-
-No database changes.
+| `src/lib/transactionNormalization.ts` | Coerce unknown types to string instead of returning null |
+| `src/components/import/ImportWizard.tsx` | Add case-insensitive row key lookup, debug warnings |
 
