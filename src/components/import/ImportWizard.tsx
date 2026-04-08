@@ -259,23 +259,34 @@ export function ImportWizard() {
     toast({ title: 'Formato não suportado', description: 'Use PDF, CSV, XLS, XLSX, ODS, TSV, OFX ou QIF', variant: 'destructive' });
   }, [transactions, toast, reset, userMappings]);
 
+  const getRowValue = (row: Record<string, unknown>, key: string): unknown => {
+    if (key in row) return row[key];
+    const lowerKey = key.toLowerCase();
+    for (const k of Object.keys(row)) {
+      if (k.toLowerCase() === lowerKey) return row[k];
+    }
+    return undefined;
+  };
+
   const processSpreadsheetData = useCallback((data: Record<string, unknown>[], map: ColumnMapping) => {
     const useSplitMode = map.income !== '' || map.expense !== '';
 
     const normalized: NormalizedTransactionRow[] = data.map((row, i) => {
       try {
-        const rawDate = map.date ? row[map.date] : '';
-        const rawDesc = map.description ? row[map.description] : '';
-        const rawCat = map.category ? row[map.category] : '';
+        const rawDate = map.date ? getRowValue(row, map.date) : '';
+        const rawDesc = map.description ? getRowValue(row, map.description) : '';
+        const rawCat = map.category ? getRowValue(row, map.category) : '';
 
         let amount: number;
         let type: 'income' | 'expense';
 
         if (useSplitMode) {
-          const rawIncome = map.income ? normalizeAmount(row[map.income]) : 0;
-          const rawExpense = map.expense ? normalizeAmount(row[map.expense]) : 0;
+          const rawIncomeVal = map.income ? getRowValue(row, map.income) : undefined;
+          const rawExpenseVal = map.expense ? getRowValue(row, map.expense) : undefined;
+          const rawIncome = rawIncomeVal !== undefined ? normalizeAmount(rawIncomeVal) : 0;
+          const rawExpense = rawExpenseVal !== undefined ? normalizeAmount(rawExpenseVal) : 0;
 
-          if (rawIncome && rawIncome > 0) {
+          if (rawIncome !== null && rawIncome > 0) {
             type = 'income';
             amount = rawIncome;
           } else if (rawExpense && rawExpense > 0) {
