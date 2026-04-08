@@ -235,7 +235,7 @@ export function ImportWizard() {
 
         if (data.length === 0) throw new Error('Arquivo vazio ou sem dados reconhecíveis');
 
-        const columns = Object.keys(data[0]);
+        const columns = [...new Set(data.flatMap(row => Object.keys(row)))];
         setRawData(data);
         setSourceColumns(columns);
 
