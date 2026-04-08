@@ -289,15 +289,15 @@ export function ImportWizard() {
           if (rawIncome !== null && rawIncome > 0) {
             type = 'income';
             amount = rawIncome;
-          } else if (rawExpense && rawExpense > 0) {
+          } else if (rawExpense !== null && rawExpense > 0) {
             type = 'expense';
             amount = rawExpense;
           } else {
-            // Both empty → skip
+            console.warn(`Row ${i + 2}: income=${rawIncomeVal}, expense=${rawExpenseVal}, parsed: income=${rawIncome}, expense=${rawExpense}`);
             return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Sem valor` };
           }
         } else {
-          const rawAmount = map.amount ? row[map.amount] : 0;
+          const rawAmount = map.amount ? getRowValue(row, map.amount) : 0;
           amount = normalizeAmount(rawAmount);
           if (!amount || amount === 0) {
             return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Valor inválido` };
