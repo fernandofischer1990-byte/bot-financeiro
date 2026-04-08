@@ -48,12 +48,20 @@ export function normalizeAmount(value: unknown): number | null {
     return isNaN(value) ? null : Math.abs(value);
   }
   
-  if (typeof value !== 'string') {
+  if (value === null || value === undefined) {
     return null;
   }
   
+  if (typeof value !== 'string') {
+    // Coerce booleans, objects, etc. to string for parsing
+    value = String(value);
+    if (value === 'undefined' || value === 'null' || value === 'false' || value === 'true') {
+      return null;
+    }
+  }
+  
   // Remove currency symbols, spaces used as thousand separators, and common prefixes
-  let cleaned = value
+  let cleaned = (value as string)
     .replace(/R\$\s*/gi, '')
     .trim();
   
