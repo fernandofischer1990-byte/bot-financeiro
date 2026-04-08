@@ -61,7 +61,7 @@ export function normalizeAmount(value: unknown): number | null {
   }
   
   // Remove currency symbols, spaces used as thousand separators, and common prefixes
-  let cleaned = value
+  let cleaned = (value as string)
     .replace(/R\$\s*/gi, '')
     .trim();
   
