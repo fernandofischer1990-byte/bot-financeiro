@@ -1,70 +1,77 @@
 
 
-## Web Search Integration for FinBot Chat
+## Web Search Simplificada — Usando Lovable AI Gateway (Zero Config)
 
-### Approach
+### Abordagem
 
-Instead of using Brave Search (which requires a separate API key), we'll use the **Perplexity connector** which is available as a standard connector and provides AI-powered web search with grounded responses — perfect for financial queries like "quanto está o dólar" or "qual a inflação atual".
+Em vez de configurar APIs externas (Brave, Firecrawl, Perplexity), usar o **próprio Lovable AI Gateway** que já está funcionando no projeto. Quando o usuário fizer uma pergunta que exija informações externas (cotação do dólar, Selic, CDI, etc.), o sistema faz uma **chamada separada** ao Gemini com um prompt especializado de pesquisa, antes de responder ao usuário.
 
-The integration will be done **server-side** inside the existing `chat` edge function, keeping the architecture simple: when the user's message matches web search intent, the edge function calls Perplexity, injects results into the LLM context, and the response includes sources.
+**Vantagens:**
+- Zero configuração extra — usa a mesma `LOVABLE_API_KEY` que já existe
+- Sem novos conectores, sem chaves API, sem edge functions adicionais
+- Funciona imediatamente
 
-### Implementation
+**Limitação:** Não é busca em tempo real — usa o conhecimento do modelo (atualizado até a data de treinamento). Para a maioria das perguntas financeiras conceituais (CDI, Selic, renda fixa, etc.) funciona muito bem. Para cotações exatas do momento, o modelo informará que os dados podem não estar 100% atualizados.
 
-#### 1. Connect Perplexity
-Use the Perplexity connector to get the API key available as `PERPLEXITY_API_KEY` in edge functions.
+### Implementação
 
-#### 2. Modify `supabase/functions/chat/index.ts`
-- Add a `shouldSearchWeb(message)` function with Portuguese keyword detection (dólar, inflação, selic, cotação, preço, CDI, etc.)
-- Before calling the LLM, if web search is triggered, call Perplexity's chat API (`sonar` model) with the user's query
-- Append web search results + citations to the system prompt context message
-- Add a `web_sources` field to a final SSE event so the frontend can display sources
+#### 1. Modificar `supabase/functions/chat/index.ts`
 
-#### 3. Modify system prompt in `chat/index.ts`
-Add instruction: "When web search results are provided, use them to answer and cite sources with markdown links."
+Adicionar função `shouldSearchWeb(message)` com detecção de keywords em português:
+- "quanto está", "cotação", "dólar", "selic", "cdi", "inflação", "ipca", "o que é", "como funciona", "vale a pena", "taxa de juros"
 
-#### 4. Create `src/services/webSearchService.ts`
-Not needed — search happens server-side in the edge function. No new frontend service required.
-
-#### 5. Modify `src/components/chat/ChatInterface.tsx`
-- After streaming completes, extract sources from the response metadata
-- Pass sources to `addMessage` as metadata: `{ sources: [...] }`
-
-#### 6. Modify `src/components/chat/MessageBubble.tsx`
-- Add a "Fontes" section below assistant messages when `message.metadata?.sources` exists
-- Render each source as a clickable link with title
-
-#### 7. Modify `src/services/chatService.ts`
-- Update `sendChatMessage` to also accept an optional `webSearchQuery` parameter
-- Or simpler: pass the web search intent flag in the request body and let the edge function handle it entirely
-
-### Simplified Architecture
+Quando detectado, fazer uma chamada **não-streaming** ao Lovable AI Gateway com um prompt de pesquisa:
 
 ```text
-User Message → ChatInterface.tsx
-    → sendChatMessage() to chat edge function
-    → Edge function detects web search intent
-    → Calls Perplexity API (server-side)
-    → Injects results into LLM context
-    → Streams response with sources
-    → Frontend displays message + sources
+"Você é um assistente de pesquisa financeira. Responda de forma factual e concisa sobre: {query}. 
+Inclua dados numéricos quando possível. Se os dados podem estar desatualizados, avise."
 ```
 
-### File Summary
+Injetar o resultado como contexto adicional no system prompt do chat principal:
 
-| File | Change |
-|------|--------|
-| `supabase/functions/chat/index.ts` | Add web search detection + Perplexity call + inject results into context |
-| `src/components/chat/MessageBubble.tsx` | Add sources display section |
-| `src/components/chat/ChatInterface.tsx` | Extract and persist sources metadata from response |
-| `src/services/chatService.ts` | Minor: parse final SSE event for sources metadata |
+```text
+## INFORMAÇÕES DE PESQUISA:
+{resultado da pesquisa}
+Nota: Dados baseados no conhecimento do modelo, podem não refletir valores em tempo real.
+```
 
-### What stays the same
-- All financial action parsing (add/delete transactions)
-- SSE streaming
-- Chat message persistence
-- Import functionality
-- Dashboard
+#### 2. Atualizar system prompt
 
-### Prerequisites
-- Connect Perplexity via the connector system (will prompt user)
+Adicionar instrução ao `SYSTEM_PROMPT`:
+- "Quando informações de pesquisa forem fornecidas no contexto, use-as para responder. Sempre avise que os dados podem não estar 100% atualizados para cotações e taxas."
+
+#### 3. Indicador visual no frontend
+
+Modificar `src/components/chat/ChatInterface.tsx`:
+- Quando web search for ativado, mostrar um indicador "🔍 Pesquisando..." antes da resposta
+
+Modificar `src/services/chatService.ts`:
+- Nenhuma alteração necessária — tudo acontece server-side
+
+### Fluxo
+
+```text
+Usuário: "Quanto está o dólar?"
+    ↓
+Edge function detecta intenção de busca
+    ↓
+Chamada rápida ao Gemini (pesquisa)
+    ↓
+Resultado injetado no contexto do LLM principal
+    ↓
+Resposta streaming com informações enriquecidas
+```
+
+### Evolução futura
+
+Se quiser dados em tempo real no futuro, basta conectar o Firecrawl (1 clique) e trocar a chamada de pesquisa por uma busca real — a arquitetura já estará pronta.
+
+### Resumo de arquivos
+
+| Arquivo | Alteração |
+|---------|-----------|
+| `supabase/functions/chat/index.ts` | Adicionar `shouldSearchWeb()` + chamada de pesquisa ao Gateway + contexto extra |
+| `src/components/chat/ChatInterface.tsx` | Indicador "Pesquisando..." durante busca |
+
+Sem novas edge functions. Sem novos conectores. Sem chaves API. Sem alterações no banco de dados.
 
