@@ -1,48 +1,70 @@
 
 
-## Fix: Income Column Not Detected Because First Row Has Empty Cell
+## Web Search Integration for FinBot Chat
 
-### Root Cause
+### Approach
 
-**Line 238** of `ImportWizard.tsx`:
-```typescript
-const columns = Object.keys(data[0]);
+Instead of using Brave Search (which requires a separate API key), we'll use the **Perplexity connector** which is available as a standard connector and provides AI-powered web search with grounded responses — perfect for financial queries like "quanto está o dólar" or "qual a inflação atual".
+
+The integration will be done **server-side** inside the existing `chat` edge function, keeping the architecture simple: when the user's message matches web search intent, the edge function calls Perplexity, injects results into the LLM context, and the response includes sources.
+
+### Implementation
+
+#### 1. Connect Perplexity
+Use the Perplexity connector to get the API key available as `PERPLEXITY_API_KEY` in edge functions.
+
+#### 2. Modify `supabase/functions/chat/index.ts`
+- Add a `shouldSearchWeb(message)` function with Portuguese keyword detection (dólar, inflação, selic, cotação, preço, CDI, etc.)
+- Before calling the LLM, if web search is triggered, call Perplexity's chat API (`sonar` model) with the user's query
+- Append web search results + citations to the system prompt context message
+- Add a `web_sources` field to a final SSE event so the frontend can display sources
+
+#### 3. Modify system prompt in `chat/index.ts`
+Add instruction: "When web search results are provided, use them to answer and cite sources with markdown links."
+
+#### 4. Create `src/services/webSearchService.ts`
+Not needed — search happens server-side in the edge function. No new frontend service required.
+
+#### 5. Modify `src/components/chat/ChatInterface.tsx`
+- After streaming completes, extract sources from the response metadata
+- Pass sources to `addMessage` as metadata: `{ sources: [...] }`
+
+#### 6. Modify `src/components/chat/MessageBubble.tsx`
+- Add a "Fontes" section below assistant messages when `message.metadata?.sources` exists
+- Render each source as a clickable link with title
+
+#### 7. Modify `src/services/chatService.ts`
+- Update `sendChatMessage` to also accept an optional `webSearchQuery` parameter
+- Or simpler: pass the web search intent flag in the request body and let the edge function handle it entirely
+
+### Simplified Architecture
+
+```text
+User Message → ChatInterface.tsx
+    → sendChatMessage() to chat edge function
+    → Edge function detects web search intent
+    → Calls Perplexity API (server-side)
+    → Injects results into LLM context
+    → Streams response with sources
+    → Frontend displays message + sources
 ```
-
-The xlsx library's `sheet_to_json` omits keys for empty cells. The first data row is "jantar" (an expense) — its "Receitas" cell is empty, so the key `"Receitas"` doesn't appear in `data[0]`. The auto-detector never sees the income column.
-
-**Result**: `mapping.income = ""`, income rows have no value to read, and all 6 income transactions are silently dropped.
-
-### Fix — One line change
-
-**File**: `src/components/import/ImportWizard.tsx`, line 238
-
-Replace:
-```typescript
-const columns = Object.keys(data[0]);
-```
-
-With:
-```typescript
-const columns = [...new Set(data.flatMap(row => Object.keys(row)))];
-```
-
-This collects column names from **all rows**, ensuring columns that only have values in some rows (like "Receitas") are always detected.
-
-### Why this is sufficient
-
-- Auto-detection logic is correct — it already maps "Receitas" → income
-- Split-mode processing is correct — it already checks income before expense
-- `normalizeAmount` is correct — it handles both number and string values
-- `getRowValue` is correct — it does case-insensitive lookup
-
-The only bug is that the income column name is never discovered.
 
 ### File Summary
 
 | File | Change |
 |------|--------|
-| `src/components/import/ImportWizard.tsx` | Line 238: collect columns from all rows, not just first |
+| `supabase/functions/chat/index.ts` | Add web search detection + Perplexity call + inject results into context |
+| `src/components/chat/MessageBubble.tsx` | Add sources display section |
+| `src/components/chat/ChatInterface.tsx` | Extract and persist sources metadata from response |
+| `src/services/chatService.ts` | Minor: parse final SSE event for sources metadata |
 
-No database changes. No new files.
+### What stays the same
+- All financial action parsing (add/delete transactions)
+- SSE streaming
+- Chat message persistence
+- Import functionality
+- Dashboard
+
+### Prerequisites
+- Connect Perplexity via the connector system (will prompt user)
 
