@@ -78,11 +78,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
             value={filters.period} 
             onValueChange={(v) => handlePeriodChange(v as FilterState['period'])}
           >
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue placeholder="Período" />
-            </SelectTrigger>
-            <SelectContent>
-              {PERIOD_OPTIONS.map((opt) => (
+            <SelectTrigger className="w-[190px] h-9">
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
