@@ -2,14 +2,21 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon } from 'lucide-react';
 import { formatCurrency, getCategoryLabel } from '@/lib/constants';
 import { extractAction, ParsedAction } from '@/lib/actionParser';
 import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
 import { MessageBubble } from './MessageBubble';
+import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
+import { parseDateOnly } from '@/lib/dateUtils';
+import { format, startOfDay, endOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import {
   getMonthlyMetrics,
   getSavingsRate,
