@@ -20,6 +20,9 @@ export interface ChatContext {
   }[];
   insights: string[];
   budgets: null;
+  period_label?: string;
+  period_start?: string | null;
+  period_end?: string | null;
 }
 
 export interface ChatMessagePayload {

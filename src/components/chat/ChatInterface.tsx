@@ -2,14 +2,21 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon } from 'lucide-react';
 import { formatCurrency, getCategoryLabel } from '@/lib/constants';
 import { extractAction, ParsedAction } from '@/lib/actionParser';
 import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
 import { MessageBubble } from './MessageBubble';
+import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
+import { parseDateOnly } from '@/lib/dateUtils';
+import { format, startOfDay, endOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import {
   getMonthlyMetrics,
   getSavingsRate,
@@ -71,40 +78,75 @@ export function ChatInterface() {
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
   const [pendingAddTransaction, setPendingAddTransaction] = useState<{ action: ParsedAction, isDuplicate: boolean } | null>(null);
+
+  // ── Period filter for chat analysis ─────────────────────────────
+  const [chatPeriod, setChatPeriod] = useState<PeriodKey>('all');
+  const [customRange, setCustomRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
+  const [isCustomOpen, setIsCustomOpen] = useState(false);
+
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const insightsShownRef = useRef(false);
   const { messages, addMessage, clearHistory } = useChatMessages();
   const { toast } = useToast();
 
-  // ── Computed analytics ──────────────────────────────────────────
-  const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions]);
-  const savingsRate = useMemo(() => getSavingsRate(monthlyMetrics.income_month, monthlyMetrics.expenses_month), [monthlyMetrics]);
-  const healthScore = useMemo(() => getFinancialHealthScore(transactions), [transactions]);
-  const topCategories = useMemo(() => getTopCategories(transactions), [transactions]);
-  const spendingInsights = useMemo(() => detectSpendingInsights(transactions), [transactions]);
+  const periodRange = useMemo(
+    () => getPeriodRange(chatPeriod, customRange.start, customRange.end),
+    [chatPeriod, customRange]
+  );
+
+  // Filter transactions to the active period (if any)
+  const periodTransactions = useMemo(() => {
+    if (!periodRange.start || !periodRange.end) return transactions;
+    return transactions.filter(tx => {
+      const d = parseDateOnly(tx.transaction_date);
+      return d >= periodRange.start! && d <= periodRange.end!;
+    });
+  }, [transactions, periodRange]);
+
+  // ── Computed analytics (scoped to active period) ────────────────
+  const periodTotals = useMemo(() => {
+    let income = 0, expenses = 0;
+    for (const t of periodTransactions) {
+      if (t.type === 'income') income += Number(t.amount);
+      else expenses += Number(t.amount);
+    }
+    return { income, expenses, balance: income - expenses };
+  }, [periodTransactions]);
+
+  const monthlyMetrics = useMemo(() => getMonthlyMetrics(periodTransactions), [periodTransactions]);
+  const savingsRate = useMemo(() => getSavingsRate(periodTotals.income, periodTotals.expenses), [periodTotals]);
+  const healthScore = useMemo(() => getFinancialHealthScore(periodTransactions), [periodTransactions]);
+  const topCategories = useMemo(() => getTopCategories(periodTransactions), [periodTransactions]);
+  const spendingInsights = useMemo(() => detectSpendingInsights(periodTransactions), [periodTransactions]);
 
   const recentTransactions = useMemo(() =>
-    transactions.slice(0, 10).map(t => ({
+    periodTransactions.slice(0, 10).map(t => ({
       id: t.id,
       type: t.type,
       amount: t.amount,
       category: t.category,
       description: t.description,
       date: t.transaction_date,
-    })), [transactions]);
+    })), [periodTransactions]);
 
   const topSpendingCategories = useMemo(() => {
-    return Object.entries(metrics.byCategory)
+    const byCategory: Record<string, number> = {};
+    for (const t of periodTransactions) {
+      if (t.type === 'expense') {
+        byCategory[t.category] = (byCategory[t.category] || 0) + Number(t.amount);
+      }
+    }
+    return Object.entries(byCategory)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 5)
       .reduce((acc, [k,v]) => ({...acc, [k]: v}), {});
-  }, [metrics.byCategory]);
+  }, [periodTransactions]);
 
   const chatContext: ChatContext = useMemo(() => ({
-    balance: metrics.totalBalance,
-    income: metrics.totalIncome,
-    expenses: metrics.totalExpenses,
+    balance: chatPeriod === 'all' ? metrics.totalBalance : periodTotals.balance,
+    income: chatPeriod === 'all' ? metrics.totalIncome : periodTotals.income,
+    expenses: chatPeriod === 'all' ? metrics.totalExpenses : periodTotals.expenses,
     income_month: monthlyMetrics.income_month,
     expenses_month: monthlyMetrics.expenses_month,
     savings_rate: savingsRate,
@@ -114,7 +156,27 @@ export function ChatInterface() {
     recentTransactions,
     insights: spendingInsights,
     budgets: null,
-  }), [metrics, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, spendingInsights]);
+    period_label: periodRange.label,
+    period_start: periodRange.start ? format(periodRange.start, 'yyyy-MM-dd') : null,
+    period_end: periodRange.end ? format(periodRange.end, 'yyyy-MM-dd') : null,
+  }), [chatPeriod, metrics, periodTotals, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, spendingInsights, periodRange]);
+
+  const handleChatPeriodChange = (period: PeriodKey) => {
+    if (period === 'custom') {
+      setIsCustomOpen(true);
+      setChatPeriod('custom');
+      return;
+    }
+    setChatPeriod(period);
+    setCustomRange({ start: null, end: null });
+  };
+
+  const handleCustomRangeSelect = (range: { from?: Date; to?: Date } | undefined) => {
+    if (range?.from && range?.to) {
+      setCustomRange({ start: startOfDay(range.from), end: endOfDay(range.to) });
+      setIsCustomOpen(false);
+    }
+  };
 
   // ── Proactive insights on chat open ─────────────────────────────
   useEffect(() => {
@@ -288,18 +350,65 @@ export function ChatInterface() {
     <div className="flex flex-col h-full bg-card rounded-xl border shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-primary rounded-lg">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-2 bg-primary rounded-lg shrink-0">
             <Bot className="h-5 w-5 text-primary-foreground" />
           </div>
-          <div>
-            <h3 className="font-semibold">FinBot Copilot</h3>
-            <p className="text-xs text-muted-foreground">Seu copiloto financeiro inteligente</p>
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate">FinBot Copilot</h3>
+            <p className="text-xs text-muted-foreground truncate">Seu copiloto financeiro inteligente</p>
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={handleClearHistory} title="Limpar histórico">
           <Trash2 className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* Period filter bar */}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b bg-muted/30">
+        <span className="text-xs text-muted-foreground font-medium">Analisar:</span>
+        <Select value={chatPeriod} onValueChange={(v) => handleChatPeriodChange(v as PeriodKey)}>
+          <SelectTrigger className="h-8 w-[180px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PERIOD_OPTIONS.map(opt => (
+              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {chatPeriod === 'custom' && (
+          <Popover open={isCustomOpen} onOpenChange={setIsCustomOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs">
+                <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
+                {customRange.start && customRange.end
+                  ? `${format(customRange.start, 'dd/MM')} – ${format(customRange.end, 'dd/MM')}`
+                  : 'Selecionar datas'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={{
+                  from: customRange.start || undefined,
+                  to: customRange.end || undefined,
+                }}
+                onSelect={handleCustomRangeSelect}
+                locale={ptBR}
+                numberOfMonths={1}
+                className="p-3 pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        )}
+        {chatPeriod !== 'all' && periodRange.start && periodRange.end && (
+          <span className="text-[11px] text-muted-foreground ml-auto">
+            {periodTransactions.length} transações
+          </span>
+        )}
       </div>
 
       {/* Messages */}

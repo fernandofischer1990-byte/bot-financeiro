@@ -240,12 +240,22 @@ serve(async (req) => {
       }
     }
 
-    let contextMessage = `\n\n## DADOS FINANCEIROS DO USUÁRIO:
-- Saldo total: R$ ${context?.balance?.toFixed(2) || '0.00'}
-- Receitas totais: R$ ${context?.income?.toFixed(2) || '0.00'}
-- Despesas totais: R$ ${context?.expenses?.toFixed(2) || '0.00'}
-- Receitas do mês atual: R$ ${context?.income_month?.toFixed(2) || '0.00'}
-- Despesas do mês atual: R$ ${context?.expenses_month?.toFixed(2) || '0.00'}
+    const periodLabel = context?.period_label || 'Todo período';
+    const periodStart = context?.period_start;
+    const periodEnd = context?.period_end;
+    const periodLine = periodStart && periodEnd
+      ? `${periodLabel} (de ${periodStart} até ${periodEnd})`
+      : periodLabel;
+
+    let contextMessage = `\n\n## PERÍODO DE ANÁLISE ATIVO: ${periodLine}
+(Todos os números abaixo, exceto onde indicado, referem-se a este período. Quando o usuário perguntar sobre "gastos", "receitas" ou "saldo" sem especificar prazo, use estes valores e mencione o período.)
+
+## DADOS FINANCEIROS DO USUÁRIO (no período):
+- Saldo: R$ ${context?.balance?.toFixed(2) || '0.00'}
+- Receitas: R$ ${context?.income?.toFixed(2) || '0.00'}
+- Despesas: R$ ${context?.expenses?.toFixed(2) || '0.00'}
+- Receitas do mês corrente: R$ ${context?.income_month?.toFixed(2) || '0.00'}
+- Despesas do mês corrente: R$ ${context?.expenses_month?.toFixed(2) || '0.00'}
 - Taxa de poupança: ${context?.savings_rate ?? 0}%
 - Score financeiro: ${context?.health_score ?? 0}/100
 - Data de hoje: ${new Date().toISOString().split('T')[0]}`;

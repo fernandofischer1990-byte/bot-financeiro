@@ -1,77 +1,57 @@
 
 
-## Web Search Simplificada — Usando Lovable AI Gateway (Zero Config)
+## Filtros de Período: Dashboard e Chat
 
-### Abordagem
+### Situação atual
 
-Em vez de configurar APIs externas (Brave, Firecrawl, Perplexity), usar o **próprio Lovable AI Gateway** que já está funcionando no projeto. Quando o usuário fizer uma pergunta que exija informações externas (cotação do dólar, Selic, CDI, etc.), o sistema faz uma **chamada separada** ao Gemini com um prompt especializado de pesquisa, antes de responder ao usuário.
+O **dashboard já tem** filtros de período (Hoje, Semana, Mês, Últimos 3 meses, Personalizado). Falta apenas:
+1. Opção explícita de **Trimestre** (trimestre atual e trimestre anterior)
+2. **Filtros de período no chat** para que o FinBot analise apenas o intervalo escolhido
 
-**Vantagens:**
-- Zero configuração extra — usa a mesma `LOVABLE_API_KEY` que já existe
-- Sem novos conectores, sem chaves API, sem edge functions adicionais
-- Funciona imediatamente
+### Mudanças
 
-**Limitação:** Não é busca em tempo real — usa o conhecimento do modelo (atualizado até a data de treinamento). Para a maioria das perguntas financeiras conceituais (CDI, Selic, renda fixa, etc.) funciona muito bem. Para cotações exatas do momento, o modelo informará que os dados podem não estar 100% atualizados.
+#### 1. Dashboard — adicionar opção "Trimestre"
 
-### Implementação
+`src/components/dashboard/DashboardFilters.tsx`:
+- Adicionar `'quarter'` e `'last_quarter'` ao tipo `FilterState['period']`
+- Adicionar entradas em `PERIOD_OPTIONS`: "Este trimestre" e "Trimestre anterior"
+- No `handlePeriodChange`, calcular início/fim usando `startOfQuarter`/`endOfQuarter` de `date-fns`, com `subQuarters` para o anterior
 
-#### 1. Modificar `supabase/functions/chat/index.ts`
+Sem outras alterações no Dashboard — a lógica de filtragem em `TransactionsContext` já usa `startDate`/`endDate`, então funciona automaticamente.
 
-Adicionar função `shouldSearchWeb(message)` com detecção de keywords em português:
-- "quanto está", "cotação", "dólar", "selic", "cdi", "inflação", "ipca", "o que é", "como funciona", "vale a pena", "taxa de juros"
+#### 2. Chat — novo seletor de período
 
-Quando detectado, fazer uma chamada **não-streaming** ao Lovable AI Gateway com um prompt de pesquisa:
+`src/components/chat/ChatInterface.tsx`:
+- Adicionar estado `chatPeriod` com mesmas opções (mês, trimestre, intervalo personalizado, todo período)
+- Adicionar UI compacta no header do chat: um `Select` com as opções de período + popover de calendário para custom
+- Calcular `transactionsInPeriod` (filtragem das transações pelo período do chat) com `useMemo`
+- Recalcular as métricas que vão para `chatContext` usando esse subconjunto:
+  - `monthlyMetrics`, `savingsRate`, `healthScore`, `topCategories`, `recentTransactions`, `topSpendingCategories`, `spendingInsights`
+- Passar o rótulo do período no `chatContext` (novo campo `period_label`) para o LLM saber sobre qual janela está respondendo
 
-```text
-"Você é um assistente de pesquisa financeira. Responda de forma factual e concisa sobre: {query}. 
-Inclua dados numéricos quando possível. Se os dados podem estar desatualizados, avise."
-```
+`src/services/chatService.ts`:
+- Adicionar `period_label?: string` ao tipo `ChatContext`
 
-Injetar o resultado como contexto adicional no system prompt do chat principal:
+`supabase/functions/chat/index.ts`:
+- Incluir `period_label` no `contextMessage` injetado no system prompt: "## PERÍODO DE ANÁLISE: {label}"
+- Atualizar o `SYSTEM_PROMPT` para considerar o período ao responder ("Quando o usuário perguntar sobre 'gastos', refira-se ao período ativo no contexto")
 
-```text
-## INFORMAÇÕES DE PESQUISA:
-{resultado da pesquisa}
-Nota: Dados baseados no conhecimento do modelo, podem não refletir valores em tempo real.
-```
+#### 3. Helper compartilhado
 
-#### 2. Atualizar system prompt
-
-Adicionar instrução ao `SYSTEM_PROMPT`:
-- "Quando informações de pesquisa forem fornecidas no contexto, use-as para responder. Sempre avise que os dados podem não estar 100% atualizados para cotações e taxas."
-
-#### 3. Indicador visual no frontend
-
-Modificar `src/components/chat/ChatInterface.tsx`:
-- Quando web search for ativado, mostrar um indicador "🔍 Pesquisando..." antes da resposta
-
-Modificar `src/services/chatService.ts`:
-- Nenhuma alteração necessária — tudo acontece server-side
-
-### Fluxo
-
-```text
-Usuário: "Quanto está o dólar?"
-    ↓
-Edge function detecta intenção de busca
-    ↓
-Chamada rápida ao Gemini (pesquisa)
-    ↓
-Resultado injetado no contexto do LLM principal
-    ↓
-Resposta streaming com informações enriquecidas
-```
-
-### Evolução futura
-
-Se quiser dados em tempo real no futuro, basta conectar o Firecrawl (1 clique) e trocar a chamada de pesquisa por uma busca real — a arquitetura já estará pronta.
+Criar `src/lib/periodUtils.ts` com:
+- Tipo `PeriodKey` (`'all' | 'today' | 'week' | 'month' | 'quarter' | 'last_quarter' | '3months' | 'custom'`)
+- `getPeriodRange(period, customStart?, customEnd?)` → `{ start: Date | null, end: Date | null, label: string }`
+- Usado tanto pelo `DashboardFilters` quanto pelo seletor do chat (DRY)
 
 ### Resumo de arquivos
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `supabase/functions/chat/index.ts` | Adicionar `shouldSearchWeb()` + chamada de pesquisa ao Gateway + contexto extra |
-| `src/components/chat/ChatInterface.tsx` | Indicador "Pesquisando..." durante busca |
+| Arquivo | Mudança |
+|---------|---------|
+| `src/lib/periodUtils.ts` | Novo: helper de cálculo de períodos + labels |
+| `src/components/dashboard/DashboardFilters.tsx` | Adicionar opções de trimestre, refatorar para usar helper |
+| `src/components/chat/ChatInterface.tsx` | Novo seletor de período + filtragem das métricas enviadas ao LLM |
+| `src/services/chatService.ts` | Adicionar `period_label` ao tipo `ChatContext` |
+| `supabase/functions/chat/index.ts` | Injetar período no contexto do system prompt |
 
-Sem novas edge functions. Sem novos conectores. Sem chaves API. Sem alterações no banco de dados.
+Sem alterações no banco de dados.
 
