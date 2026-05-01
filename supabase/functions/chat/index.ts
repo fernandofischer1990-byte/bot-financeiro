@@ -10,6 +10,28 @@ const MAX_MESSAGE_LENGTH = 10000;
 const MAX_MESSAGES = 50;
 const MAX_CONTEXT_SIZE = 15000;
 
+// Keywords que indicam intenção de busca por informação externa/atualizada
+const WEB_SEARCH_KEYWORDS = [
+  'quanto está', 'quanto custa', 'cotação', 'cotacao', 'dólar', 'dolar', 'euro',
+  'bitcoin', 'btc', 'ethereum', 'selic', 'cdi', 'ipca', 'inflação', 'inflacao',
+  'taxa de juros', 'bolsa', 'ibovespa', 'ações', 'acoes',
+  'o que é', 'o que e', 'como funciona', 'vale a pena', 'qual a diferença',
+  'qual a diferenca', 'me explica', 'explique', 'definição', 'definicao',
+  'tesouro direto', 'lci', 'lca', 'cdb', 'fii', 'renda fixa', 'renda variável',
+  'renda variavel', 'previdência', 'previdencia', 'imposto de renda',
+];
+
+function shouldSearchWeb(message: string): boolean {
+  if (!message || message.length < 5) return false;
+  const lower = message.toLowerCase();
+  // Não disparar para comandos de transação ou comandos do app
+  if (lower.startsWith('/')) return false;
+  if (/\bgastei\b|\brecebi\b|\bpaguei\b|\badicionar\b|\bregistrar\b|\bexcluir\b|\bdeletar\b/.test(lower)) {
+    return false;
+  }
+  return WEB_SEARCH_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 const SYSTEM_PROMPT = `Você é o FinBot Copilot, um copiloto financeiro inteligente para usuários brasileiros. Você analisa finanças, detecta padrões, fornece insights proativos e ajuda a tomar melhores decisões financeiras.
 
 ## REGRAS CRÍTICAS DE RESPOSTA (OBRIGATÓRIAS):
