@@ -9,7 +9,6 @@ import { Filter, CalendarIcon, X } from 'lucide-react';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ALL_CATEGORIES } from '@/lib/constants';
-import { cn } from '@/lib/utils';
 import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
 
 export interface FilterState {
