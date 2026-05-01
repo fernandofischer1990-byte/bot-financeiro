@@ -6,13 +6,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Filter, CalendarIcon, X } from 'lucide-react';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ALL_CATEGORIES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
 
 export interface FilterState {
-  period: 'all' | 'today' | 'week' | 'month' | '3months' | 'custom';
+  period: PeriodKey;
   type: 'all' | 'income' | 'expense';
   category: string;
   startDate: Date | null;
@@ -24,49 +25,17 @@ interface DashboardFiltersProps {
   onFiltersChange: (filters: FilterState) => void;
 }
 
-const PERIOD_OPTIONS = [
-  { value: 'all', label: 'Todo período' },
-  { value: 'today', label: 'Hoje' },
-  { value: 'week', label: 'Esta semana' },
-  { value: 'month', label: 'Este mês' },
-  { value: '3months', label: 'Últimos 3 meses' },
-  { value: 'custom', label: 'Personalizado' },
-];
-
 export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersProps) {
   const [isCustomOpen, setIsCustomOpen] = useState(false);
 
   const handlePeriodChange = (period: FilterState['period']) => {
-    const now = new Date();
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
-
-    switch (period) {
-      case 'today':
-        startDate = startOfDay(now);
-        endDate = endOfDay(now);
-        break;
-      case 'week':
-        startDate = startOfWeek(now, { locale: ptBR });
-        endDate = endOfWeek(now, { locale: ptBR });
-        break;
-      case 'month':
-        startDate = startOfMonth(now);
-        endDate = endOfMonth(now);
-        break;
-      case '3months':
-        startDate = startOfMonth(subMonths(now, 2));
-        endDate = endOfMonth(now);
-        break;
-      case 'custom':
-        setIsCustomOpen(true);
-        return;
-      default:
-        startDate = null;
-        endDate = null;
+    if (period === 'custom') {
+      setIsCustomOpen(true);
+      onFiltersChange({ ...filters, period, startDate: null, endDate: null });
+      return;
     }
-
-    onFiltersChange({ ...filters, period, startDate, endDate });
+    const { start, end } = getPeriodRange(period);
+    onFiltersChange({ ...filters, period, startDate: start, endDate: end });
   };
 
   const handleCustomDateSelect = (range: { from?: Date; to?: Date } | undefined) => {
