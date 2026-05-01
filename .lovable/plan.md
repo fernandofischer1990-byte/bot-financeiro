@@ -1,48 +1,77 @@
 
 
-## Fix: Income Column Not Detected Because First Row Has Empty Cell
+## Web Search Simplificada — Usando Lovable AI Gateway (Zero Config)
 
-### Root Cause
+### Abordagem
 
-**Line 238** of `ImportWizard.tsx`:
-```typescript
-const columns = Object.keys(data[0]);
+Em vez de configurar APIs externas (Brave, Firecrawl, Perplexity), usar o **próprio Lovable AI Gateway** que já está funcionando no projeto. Quando o usuário fizer uma pergunta que exija informações externas (cotação do dólar, Selic, CDI, etc.), o sistema faz uma **chamada separada** ao Gemini com um prompt especializado de pesquisa, antes de responder ao usuário.
+
+**Vantagens:**
+- Zero configuração extra — usa a mesma `LOVABLE_API_KEY` que já existe
+- Sem novos conectores, sem chaves API, sem edge functions adicionais
+- Funciona imediatamente
+
+**Limitação:** Não é busca em tempo real — usa o conhecimento do modelo (atualizado até a data de treinamento). Para a maioria das perguntas financeiras conceituais (CDI, Selic, renda fixa, etc.) funciona muito bem. Para cotações exatas do momento, o modelo informará que os dados podem não estar 100% atualizados.
+
+### Implementação
+
+#### 1. Modificar `supabase/functions/chat/index.ts`
+
+Adicionar função `shouldSearchWeb(message)` com detecção de keywords em português:
+- "quanto está", "cotação", "dólar", "selic", "cdi", "inflação", "ipca", "o que é", "como funciona", "vale a pena", "taxa de juros"
+
+Quando detectado, fazer uma chamada **não-streaming** ao Lovable AI Gateway com um prompt de pesquisa:
+
+```text
+"Você é um assistente de pesquisa financeira. Responda de forma factual e concisa sobre: {query}. 
+Inclua dados numéricos quando possível. Se os dados podem estar desatualizados, avise."
 ```
 
-The xlsx library's `sheet_to_json` omits keys for empty cells. The first data row is "jantar" (an expense) — its "Receitas" cell is empty, so the key `"Receitas"` doesn't appear in `data[0]`. The auto-detector never sees the income column.
+Injetar o resultado como contexto adicional no system prompt do chat principal:
 
-**Result**: `mapping.income = ""`, income rows have no value to read, and all 6 income transactions are silently dropped.
-
-### Fix — One line change
-
-**File**: `src/components/import/ImportWizard.tsx`, line 238
-
-Replace:
-```typescript
-const columns = Object.keys(data[0]);
+```text
+## INFORMAÇÕES DE PESQUISA:
+{resultado da pesquisa}
+Nota: Dados baseados no conhecimento do modelo, podem não refletir valores em tempo real.
 ```
 
-With:
-```typescript
-const columns = [...new Set(data.flatMap(row => Object.keys(row)))];
+#### 2. Atualizar system prompt
+
+Adicionar instrução ao `SYSTEM_PROMPT`:
+- "Quando informações de pesquisa forem fornecidas no contexto, use-as para responder. Sempre avise que os dados podem não estar 100% atualizados para cotações e taxas."
+
+#### 3. Indicador visual no frontend
+
+Modificar `src/components/chat/ChatInterface.tsx`:
+- Quando web search for ativado, mostrar um indicador "🔍 Pesquisando..." antes da resposta
+
+Modificar `src/services/chatService.ts`:
+- Nenhuma alteração necessária — tudo acontece server-side
+
+### Fluxo
+
+```text
+Usuário: "Quanto está o dólar?"
+    ↓
+Edge function detecta intenção de busca
+    ↓
+Chamada rápida ao Gemini (pesquisa)
+    ↓
+Resultado injetado no contexto do LLM principal
+    ↓
+Resposta streaming com informações enriquecidas
 ```
 
-This collects column names from **all rows**, ensuring columns that only have values in some rows (like "Receitas") are always detected.
+### Evolução futura
 
-### Why this is sufficient
+Se quiser dados em tempo real no futuro, basta conectar o Firecrawl (1 clique) e trocar a chamada de pesquisa por uma busca real — a arquitetura já estará pronta.
 
-- Auto-detection logic is correct — it already maps "Receitas" → income
-- Split-mode processing is correct — it already checks income before expense
-- `normalizeAmount` is correct — it handles both number and string values
-- `getRowValue` is correct — it does case-insensitive lookup
+### Resumo de arquivos
 
-The only bug is that the income column name is never discovered.
+| Arquivo | Alteração |
+|---------|-----------|
+| `supabase/functions/chat/index.ts` | Adicionar `shouldSearchWeb()` + chamada de pesquisa ao Gateway + contexto extra |
+| `src/components/chat/ChatInterface.tsx` | Indicador "Pesquisando..." durante busca |
 
-### File Summary
-
-| File | Change |
-|------|--------|
-| `src/components/import/ImportWizard.tsx` | Line 238: collect columns from all rows, not just first |
-
-No database changes. No new files.
+Sem novas edge functions. Sem novos conectores. Sem chaves API. Sem alterações no banco de dados.
 
