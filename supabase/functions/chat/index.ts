@@ -177,6 +177,47 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ── Web Search (simplificado via Lovable AI) ────────────────────
+    const lastUserMessage = [...messages].reverse().find((m: { role: string; content: string }) => m.role === 'user')?.content || '';
+    let webSearchContext = '';
+
+    if (shouldSearchWeb(lastUserMessage)) {
+      console.log("[Chat] WebSearch triggered:", lastUserMessage);
+      try {
+        const searchRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [
+              {
+                role: "system",
+                content: "Você é um assistente de pesquisa financeira para o Brasil. Responda de forma factual, objetiva e concisa (máx 200 palavras). Inclua dados numéricos, taxas, percentuais e definições quando relevante. Se a informação puder estar desatualizada (cotações em tempo real), avise explicitamente."
+              },
+              { role: "user", content: lastUserMessage },
+            ],
+            stream: false,
+          }),
+        });
+
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const searchText = searchData?.choices?.[0]?.message?.content || '';
+          console.log("[Chat] WebSearch results:", searchText.length);
+          if (searchText) {
+            webSearchContext = `\n\n## INFORMAÇÕES DE PESQUISA (USE NA RESPOSTA):\n${searchText}\n\nNota: Estas informações são baseadas no conhecimento do modelo e podem não refletir valores em tempo real. Sempre avise o usuário quando se tratar de cotações, taxas ou dados de mercado.`;
+          }
+        } else {
+          console.warn("[Chat] WebSearch failed with status:", searchRes.status);
+        }
+      } catch (err) {
+        console.warn("[Chat] WebSearch error (non-fatal):", err);
+      }
+    }
+
     let contextMessage = `\n\n## DADOS FINANCEIROS DO USUÁRIO:
 - Saldo total: R$ ${context?.balance?.toFixed(2) || '0.00'}
 - Receitas totais: R$ ${context?.income?.toFixed(2) || '0.00'}
