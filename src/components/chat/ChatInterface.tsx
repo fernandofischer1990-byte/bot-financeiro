@@ -78,40 +78,75 @@ export function ChatInterface() {
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
   const [pendingAddTransaction, setPendingAddTransaction] = useState<{ action: ParsedAction, isDuplicate: boolean } | null>(null);
+
+  // ── Period filter for chat analysis ─────────────────────────────
+  const [chatPeriod, setChatPeriod] = useState<PeriodKey>('all');
+  const [customRange, setCustomRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
+  const [isCustomOpen, setIsCustomOpen] = useState(false);
+
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const insightsShownRef = useRef(false);
   const { messages, addMessage, clearHistory } = useChatMessages();
   const { toast } = useToast();
 
-  // ── Computed analytics ──────────────────────────────────────────
-  const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions]);
-  const savingsRate = useMemo(() => getSavingsRate(monthlyMetrics.income_month, monthlyMetrics.expenses_month), [monthlyMetrics]);
-  const healthScore = useMemo(() => getFinancialHealthScore(transactions), [transactions]);
-  const topCategories = useMemo(() => getTopCategories(transactions), [transactions]);
-  const spendingInsights = useMemo(() => detectSpendingInsights(transactions), [transactions]);
+  const periodRange = useMemo(
+    () => getPeriodRange(chatPeriod, customRange.start, customRange.end),
+    [chatPeriod, customRange]
+  );
+
+  // Filter transactions to the active period (if any)
+  const periodTransactions = useMemo(() => {
+    if (!periodRange.start || !periodRange.end) return transactions;
+    return transactions.filter(tx => {
+      const d = parseDateOnly(tx.transaction_date);
+      return d >= periodRange.start! && d <= periodRange.end!;
+    });
+  }, [transactions, periodRange]);
+
+  // ── Computed analytics (scoped to active period) ────────────────
+  const periodTotals = useMemo(() => {
+    let income = 0, expenses = 0;
+    for (const t of periodTransactions) {
+      if (t.type === 'income') income += Number(t.amount);
+      else expenses += Number(t.amount);
+    }
+    return { income, expenses, balance: income - expenses };
+  }, [periodTransactions]);
+
+  const monthlyMetrics = useMemo(() => getMonthlyMetrics(periodTransactions), [periodTransactions]);
+  const savingsRate = useMemo(() => getSavingsRate(periodTotals.income, periodTotals.expenses), [periodTotals]);
+  const healthScore = useMemo(() => getFinancialHealthScore(periodTransactions), [periodTransactions]);
+  const topCategories = useMemo(() => getTopCategories(periodTransactions), [periodTransactions]);
+  const spendingInsights = useMemo(() => detectSpendingInsights(periodTransactions), [periodTransactions]);
 
   const recentTransactions = useMemo(() =>
-    transactions.slice(0, 10).map(t => ({
+    periodTransactions.slice(0, 10).map(t => ({
       id: t.id,
       type: t.type,
       amount: t.amount,
       category: t.category,
       description: t.description,
       date: t.transaction_date,
-    })), [transactions]);
+    })), [periodTransactions]);
 
   const topSpendingCategories = useMemo(() => {
-    return Object.entries(metrics.byCategory)
+    const byCategory: Record<string, number> = {};
+    for (const t of periodTransactions) {
+      if (t.type === 'expense') {
+        byCategory[t.category] = (byCategory[t.category] || 0) + Number(t.amount);
+      }
+    }
+    return Object.entries(byCategory)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 5)
       .reduce((acc, [k,v]) => ({...acc, [k]: v}), {});
-  }, [metrics.byCategory]);
+  }, [periodTransactions]);
 
   const chatContext: ChatContext = useMemo(() => ({
-    balance: metrics.totalBalance,
-    income: metrics.totalIncome,
-    expenses: metrics.totalExpenses,
+    balance: chatPeriod === 'all' ? metrics.totalBalance : periodTotals.balance,
+    income: chatPeriod === 'all' ? metrics.totalIncome : periodTotals.income,
+    expenses: chatPeriod === 'all' ? metrics.totalExpenses : periodTotals.expenses,
     income_month: monthlyMetrics.income_month,
     expenses_month: monthlyMetrics.expenses_month,
     savings_rate: savingsRate,
@@ -121,7 +156,27 @@ export function ChatInterface() {
     recentTransactions,
     insights: spendingInsights,
     budgets: null,
-  }), [metrics, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, spendingInsights]);
+    period_label: periodRange.label,
+    period_start: periodRange.start ? format(periodRange.start, 'yyyy-MM-dd') : null,
+    period_end: periodRange.end ? format(periodRange.end, 'yyyy-MM-dd') : null,
+  }), [chatPeriod, metrics, periodTotals, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, spendingInsights, periodRange]);
+
+  const handleChatPeriodChange = (period: PeriodKey) => {
+    if (period === 'custom') {
+      setIsCustomOpen(true);
+      setChatPeriod('custom');
+      return;
+    }
+    setChatPeriod(period);
+    setCustomRange({ start: null, end: null });
+  };
+
+  const handleCustomRangeSelect = (range: { from?: Date; to?: Date } | undefined) => {
+    if (range?.from && range?.to) {
+      setCustomRange({ start: startOfDay(range.from), end: endOfDay(range.to) });
+      setIsCustomOpen(false);
+    }
+  };
 
   // ── Proactive insights on chat open ─────────────────────────────
   useEffect(() => {
