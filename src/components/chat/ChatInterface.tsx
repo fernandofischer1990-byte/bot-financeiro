@@ -350,18 +350,65 @@ export function ChatInterface() {
     <div className="flex flex-col h-full bg-card rounded-xl border shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-primary rounded-lg">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-2 bg-primary rounded-lg shrink-0">
             <Bot className="h-5 w-5 text-primary-foreground" />
           </div>
-          <div>
-            <h3 className="font-semibold">FinBot Copilot</h3>
-            <p className="text-xs text-muted-foreground">Seu copiloto financeiro inteligente</p>
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate">FinBot Copilot</h3>
+            <p className="text-xs text-muted-foreground truncate">Seu copiloto financeiro inteligente</p>
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={handleClearHistory} title="Limpar histórico">
           <Trash2 className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* Period filter bar */}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b bg-muted/30">
+        <span className="text-xs text-muted-foreground font-medium">Analisar:</span>
+        <Select value={chatPeriod} onValueChange={(v) => handleChatPeriodChange(v as PeriodKey)}>
+          <SelectTrigger className="h-8 w-[180px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PERIOD_OPTIONS.map(opt => (
+              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {chatPeriod === 'custom' && (
+          <Popover open={isCustomOpen} onOpenChange={setIsCustomOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs">
+                <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
+                {customRange.start && customRange.end
+                  ? `${format(customRange.start, 'dd/MM')} – ${format(customRange.end, 'dd/MM')}`
+                  : 'Selecionar datas'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={{
+                  from: customRange.start || undefined,
+                  to: customRange.end || undefined,
+                }}
+                onSelect={handleCustomRangeSelect}
+                locale={ptBR}
+                numberOfMonths={1}
+                className="p-3 pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        )}
+        {chatPeriod !== 'all' && periodRange.start && periodRange.end && (
+          <span className="text-[11px] text-muted-foreground ml-auto">
+            {periodTransactions.length} transações
+          </span>
+        )}
       </div>
 
       {/* Messages */}
