@@ -1,62 +1,48 @@
-# Corrigir erro de validação no chat ("Propriedades perigosas detectadas")
+## Corrigir filtro de datas personalizado (Dashboard)
 
-## Causa raiz
+### Problema identificado
 
-Toda mensagem enviada ao chat exibe o toast **"Erro de validação — O assistente tentou executar uma ação inválida"**.
+No dashboard, ao escolher "Personalizado" no seletor de período, o popover do calendário abre, mas **clicar nos dias não seleciona nada**. O calendário no chat funciona porque já tem o ajuste correto.
 
-Os logs revelam o motivo:
+### Causa raiz
 
-```
-CHAT_ACTION_ERROR {
-  rawResponse: '{ "message": "...", "action": null }',
-  error: "Propriedades perigosas detectadas"
-}
-```
+O componente `src/components/ui/calendar.tsx` aplica apenas `cn("p-3", className)` no `DayPicker`. Quando o calendário é renderizado dentro de um `Popover` do Radix, o Radix bloqueia `pointer-events` no body enquanto o popover está aberto — isso impede cliques nos dias do calendário.
 
-A resposta do modelo é válida (texto + `action: null`), mas o parser em `src/lib/actionParser.ts` rejeita o objeto na checagem anti-prototype-pollution:
+Em `DashboardFilters.tsx`, o `<Calendar mode="range" .../>` é usado sem passar `className="pointer-events-auto"`, então os cliques são engolidos. No `ChatInterface.tsx`, o mesmo `<Calendar>` funciona porque já passa `className="p-3 pointer-events-auto"` explicitamente.
 
-```ts
-if ('__proto__' in rawParsed || 'constructor' in rawParsed || 'prototype' in rawParsed) {
-  return { success: false, error: 'Propriedades perigosas detectadas' };
-}
-```
+Há um detalhe adicional: o handler atual `handleCustomDateSelect` só atualiza o estado quando `range.from` E `range.to` estão presentes. Isso faz o calendário parecer travado no primeiro clique (o usuário clica e nada visível acontece até o segundo clique). Vamos refletir o `from` imediatamente para dar feedback visual.
 
-O operador `in` percorre toda a cadeia de protótipos. **Todo objeto JavaScript herda `constructor` de `Object.prototype`**, então essa verificação retorna `true` para qualquer `{}`. Resultado: 100% das respostas são marcadas como inválidas.
+### Mudanças
 
-Além disso, o modelo está retornando `"action": null`, e o schema Zod atual exige `action` como `optional()` (que aceita `undefined`, mas não `null`). Mesmo após corrigir a checagem, `null` ainda quebraria a validação Zod com outra mensagem de erro.
+**1. `src/components/ui/calendar.tsx`** — adicionar `pointer-events-auto` por padrão para que o componente funcione corretamente em qualquer Popover/Dialog (alinha com a recomendação oficial do shadcn):
 
-## Correção
-
-### Arquivo: `src/lib/actionParser.ts`
-
-1. **Trocar a checagem de prototype pollution** para usar `Object.prototype.hasOwnProperty.call(...)`, que só inspeciona chaves *próprias* do objeto (que é o ataque real do JSON.parse):
-
-```ts
-const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(rawParsed, key);
-if (hasOwn('__proto__') || hasOwn('constructor') || hasOwn('prototype')) {
-  return { success: false, error: 'Propriedades perigosas detectadas' };
-}
+```tsx
+className={cn("p-3 pointer-events-auto", className)}
 ```
 
-2. **Aceitar `action: null`** no schema Zod, tratando-o como ausência de ação:
+**2. `src/components/dashboard/DashboardFilters.tsx`** — melhorar `handleCustomDateSelect` para refletir a seleção parcial (somente `from`) na UI e só fechar o popover quando o range estiver completo:
 
-```ts
-const AIResponseSchema = z.object({
-  message: z.string(),
-  action: ActionPayloadSchema.nullable().optional()
-});
+```tsx
+const handleCustomDateSelect = (range: { from?: Date; to?: Date } | undefined) => {
+  if (!range) return;
+  const start = range.from ? startOfDay(range.from) : null;
+  const end = range.to ? endOfDay(range.to) : null;
+  onFiltersChange({ ...filters, period: 'custom', startDate: start, endDate: end });
+  if (start && end) setIsCustomOpen(false);
+};
 ```
 
-E logo após desestruturar, normalizar: `if (!rawAction) return { success: true, message };` (já existe, só precisa aceitar `null`).
+### Resultado esperado
 
-## Verificação
+- Clicar em um dia já destaca a data inicial (feedback imediato).
+- Clicar no segundo dia completa o intervalo, fecha o popover e aplica o filtro.
+- Funciona tanto no Dashboard quanto em qualquer outro lugar que use `<Calendar>` em Popover/Dialog.
 
-Após o fix, enviar mensagens conversacionais (sem ação) ao chat não deve mais disparar o toast vermelho. Mensagens com ação real (`add_transaction`, `delete_transaction`) continuam funcionando normalmente.
-
-## Arquivos alterados
+### Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `src/lib/actionParser.ts` | Trocar `in` por `hasOwnProperty.call`; aceitar `action: null` no schema |
+| `src/components/ui/calendar.tsx` | Adicionar `pointer-events-auto` à className padrão |
+| `src/components/dashboard/DashboardFilters.tsx` | Aceitar seleção parcial e fechar só quando range completo |
 
-Sem mudanças em backend, edge functions, contexto ou UI.
+Sem alterações em backend, edge functions ou banco de dados.
