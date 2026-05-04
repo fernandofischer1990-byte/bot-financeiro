@@ -289,7 +289,7 @@ export function ImportWizard() {
         setDetectionInfo(detection);
 
         if (detection.confidence >= 70) {
-          processSpreadsheetData(data, detection.mapping);
+          await processSpreadsheetData(data, detection.mapping);
         } else {
           setIsFallbackMapping(true);
           setStep('mapping');
