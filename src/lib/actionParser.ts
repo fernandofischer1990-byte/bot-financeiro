@@ -17,7 +17,7 @@ const ActionPayloadSchema = z.object({
 
 const AIResponseSchema = z.object({
   message: z.string(),
-  action: ActionPayloadSchema.optional()
+  action: ActionPayloadSchema.nullable().optional()
 });
 
 export interface ParsedAction {
