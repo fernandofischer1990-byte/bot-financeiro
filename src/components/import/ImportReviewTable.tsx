@@ -111,9 +111,8 @@ export function ImportReviewTable({ rows, onRowsChange, onConfirm, onBack }: Imp
                         ))}
                       </SelectContent>
                     </Select>
-                    <Badge variant="outline" className={`text-[10px] ${getConfidenceColor(row.description, row.category)}`}>
-                      {getCategoryConfidence(row.description, row.category) === 'high' ? 'Alta' :
-                       getCategoryConfidence(row.description, row.category) === 'medium' ? 'Média' : 'Baixa'}
+                    <Badge variant="outline" className={`text-[10px] ${getConfidenceColor(row)}`}>
+                      {getConfidenceLabel(row)}
                     </Badge>
                   </div>
                 </div>
