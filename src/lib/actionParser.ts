@@ -53,8 +53,9 @@ export function parseAction(jsonString: string): ParseResult {
     
     const rawParsed = JSON.parse(jsonToParse);
     
-    // Security: Reject prototype pollution attempts
-    if ('__proto__' in rawParsed || 'constructor' in rawParsed || 'prototype' in rawParsed) {
+    // Security: Reject prototype pollution attempts (only check own properties)
+    const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(rawParsed, key);
+    if (hasOwn('__proto__') || hasOwn('constructor') || hasOwn('prototype')) {
       return { success: false, error: 'Propriedades perigosas detectadas' };
     }
     
