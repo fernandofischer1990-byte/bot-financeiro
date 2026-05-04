@@ -35,11 +35,22 @@ export function ImportReviewTable({ rows, onRowsChange, onConfirm, onBack }: Imp
   const getCategories = (type: 'income' | 'expense') =>
     type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
-  const getConfidenceColor = (description: string, category: string) => {
-    const confidence = getCategoryConfidence(description, category);
-    return confidence === 'high' ? 'bg-success/20 text-success' :
+  const getConfidenceColor = (row: ImportRow) => {
+    const confidence = getCategoryConfidence(row.description, row.category, row.isLearnedCategory, (row as any).isAiCategorized);
+    return confidence === 'learned' ? 'bg-primary/20 text-primary' :
+           confidence === 'ai' ? 'bg-accent/20 text-accent-foreground' :
+           confidence === 'high' ? 'bg-success/20 text-success' :
            confidence === 'medium' ? 'bg-warning/20 text-warning' :
            'bg-muted text-muted-foreground';
+  };
+
+  const getConfidenceLabel = (row: ImportRow) => {
+    const confidence = getCategoryConfidence(row.description, row.category, row.isLearnedCategory, (row as any).isAiCategorized);
+    if (confidence === 'learned') return 'Aprendido';
+    if (confidence === 'ai') return 'IA';
+    if (confidence === 'high') return 'Alta';
+    if (confidence === 'medium') return 'Média';
+    return 'Baixa';
   };
 
   return (
