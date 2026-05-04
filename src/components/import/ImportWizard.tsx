@@ -136,7 +136,44 @@ export function ImportWizard() {
     setIsImporting(false);
     setDetectionInfo(null);
     setIsFallbackMapping(false);
+    setAiProgress('');
   }, []);
+
+  /**
+   * Apply AI categorization to all rows that don't have a learned mapping.
+   * Mutates a copy and returns the updated array.
+   */
+  const applyAICategorization = useCallback(async (
+    rows: NormalizedTransactionRow[]
+  ): Promise<NormalizedTransactionRow[]> => {
+    // Only send rows that don't already come from a learned mapping
+    const itemsToClassify = rows
+      .map((r, index) => ({ index, description: r.description || '', type: r.type, isLearned: (r as any).isLearnedCategory === true }))
+      .filter((it) => !it.isLearned && it.description.trim().length > 0)
+      .map(({ index, description, type }) => ({ index, description, type }));
+
+    if (itemsToClassify.length === 0) return rows;
+
+    setAiProgress(`Classificando ${itemsToClassify.length} transações com IA...`);
+    const { map, error } = await categorizeWithAI(itemsToClassify);
+
+    if (error) {
+      toast({
+        title: 'Categorização por IA falhou',
+        description: `${error} — usando categorias por padrão.`,
+        variant: 'destructive',
+      });
+      return rows;
+    }
+
+    return rows.map((r, index) => {
+      const aiCat = map.get(index);
+      if (aiCat) {
+        return { ...r, category: aiCat, isAiCategorized: true } as NormalizedTransactionRow;
+      }
+      return r;
+    });
+  }, [toast]);
 
   const handleFile = useCallback(async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
