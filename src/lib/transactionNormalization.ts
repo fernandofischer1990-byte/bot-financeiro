@@ -198,6 +198,8 @@ export interface NormalizedTransactionRow {
   description: string;
   date: string;
   error?: string;
+  isLearnedCategory?: boolean;
+  isAiCategorized?: boolean;
 }
 
 export function normalizeTransactionRow(
