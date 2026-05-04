@@ -24,6 +24,7 @@ import { cleanDescription } from '@/lib/descriptionCleaner';
 import { saveImportHistory } from '@/services/importService';
 import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, CategoryMapping } from '@/services/categoryMappingService';
 import { fetchMappingTemplates, saveMappingTemplate, deleteMappingTemplate, MappingTemplate } from '@/services/mappingTemplateService';
+import { categorizeWithAI } from '@/services/categorizationService';
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
@@ -109,6 +110,7 @@ export function ImportWizard() {
   const [templates, setTemplates] = useState<MappingTemplate[]>([]);
   const [detectionInfo, setDetectionInfo] = useState<DetectionResult | null>(null);
   const [isFallbackMapping, setIsFallbackMapping] = useState(false);
+  const [aiProgress, setAiProgress] = useState<string>('');
   const originalRowsRef = useRef<ImportRow[]>([]);
 
   const { transactions, addMultipleTransactions } = useTransactionsContext();
@@ -134,7 +136,44 @@ export function ImportWizard() {
     setIsImporting(false);
     setDetectionInfo(null);
     setIsFallbackMapping(false);
+    setAiProgress('');
   }, []);
+
+  /**
+   * Apply AI categorization to all rows that don't have a learned mapping.
+   * Mutates a copy and returns the updated array.
+   */
+  const applyAICategorization = useCallback(async (
+    rows: NormalizedTransactionRow[]
+  ): Promise<NormalizedTransactionRow[]> => {
+    // Only send rows that don't already come from a learned mapping
+    const itemsToClassify = rows
+      .map((r, index) => ({ index, description: r.description || '', type: r.type, isLearned: (r as any).isLearnedCategory === true }))
+      .filter((it) => !it.isLearned && it.description.trim().length > 0)
+      .map(({ index, description, type }) => ({ index, description, type }));
+
+    if (itemsToClassify.length === 0) return rows;
+
+    setAiProgress(`Classificando ${itemsToClassify.length} transações com IA...`);
+    const { map, error } = await categorizeWithAI(itemsToClassify);
+
+    if (error) {
+      toast({
+        title: 'Categorização por IA falhou',
+        description: `${error} — usando categorias por padrão.`,
+        variant: 'destructive',
+      });
+      return rows;
+    }
+
+    return rows.map((r, index) => {
+      const aiCat = map.get(index);
+      if (aiCat) {
+        return { ...r, category: aiCat, isAiCategorized: true } as NormalizedTransactionRow;
+      }
+      return r;
+    });
+  }, [toast]);
 
   const handleFile = useCallback(async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
@@ -158,9 +197,11 @@ export function ImportWizard() {
           };
         });
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        const aiClassified = await applyAICategorization(normalized);
+        const withDuplicates = detectDuplicates(aiClassified as any, transactions);
         originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
+        setAiProgress('');
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do PDF` });
       } catch (error) {
@@ -185,9 +226,11 @@ export function ImportWizard() {
         });
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo OFX');
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        const aiClassified = await applyAICategorization(normalized as any);
+        const withDuplicates = detectDuplicates(aiClassified as any, transactions);
         originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
+        setAiProgress('');
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do OFX` });
       } catch (error) {
@@ -212,9 +255,11 @@ export function ImportWizard() {
         });
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo QIF');
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        const aiClassified = await applyAICategorization(normalized as any);
+        const withDuplicates = detectDuplicates(aiClassified as any, transactions);
         originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
+        setAiProgress('');
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do QIF` });
       } catch (error) {
@@ -244,7 +289,7 @@ export function ImportWizard() {
         setDetectionInfo(detection);
 
         if (detection.confidence >= 70) {
-          processSpreadsheetData(data, detection.mapping);
+          await processSpreadsheetData(data, detection.mapping);
         } else {
           setIsFallbackMapping(true);
           setStep('mapping');
@@ -268,7 +313,7 @@ export function ImportWizard() {
     return undefined;
   };
 
-  const processSpreadsheetData = useCallback((data: Record<string, unknown>[], map: ColumnMapping) => {
+  const processSpreadsheetData = useCallback(async (data: Record<string, unknown>[], map: ColumnMapping) => {
     const useSplitMode = map.income !== '' || map.expense !== '';
 
     const normalized: NormalizedTransactionRow[] = data.map((row, i) => {
@@ -335,14 +380,18 @@ export function ImportWizard() {
     }).filter(r => !r.error && r.amount > 0);
 
     setTotalParsed(normalized.length);
-    const withDuplicates = detectDuplicates(normalized as any, transactions);
+    setStep('loading');
+    const aiClassified = await applyAICategorization(normalized);
+    const withDuplicates = detectDuplicates(aiClassified as any, transactions);
     originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
     setImportRows(withDuplicates);
+    setAiProgress('');
     setStep('duplicates');
-  }, [transactions, userMappings]);
+  }, [transactions, userMappings, applyAICategorization]);
 
-  const handleMappingConfirm = useCallback(() => {
-    processSpreadsheetData(rawData, mapping);
+  const handleMappingConfirm = useCallback(async () => {
+    setStep('loading');
+    await processSpreadsheetData(rawData, mapping);
   }, [rawData, mapping, processSpreadsheetData]);
 
   const handleFinalImport = useCallback(async () => {
@@ -429,8 +478,10 @@ export function ImportWizard() {
           {step === 'loading' && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin mb-3 text-primary" />
-              <span className="text-sm">Processando arquivo...</span>
-              <span className="text-xs text-muted-foreground mt-1">Isso pode levar alguns segundos</span>
+              <span className="text-sm">{aiProgress || 'Processando arquivo...'}</span>
+              <span className="text-xs text-muted-foreground mt-1">
+                {aiProgress ? 'Identificando categorias com IA' : 'Isso pode levar alguns segundos'}
+              </span>
             </div>
           )}
 
