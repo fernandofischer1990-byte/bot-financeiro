@@ -313,7 +313,7 @@ export function ImportWizard() {
     return undefined;
   };
 
-  const processSpreadsheetData = useCallback((data: Record<string, unknown>[], map: ColumnMapping) => {
+  const processSpreadsheetData = useCallback(async (data: Record<string, unknown>[], map: ColumnMapping) => {
     const useSplitMode = map.income !== '' || map.expense !== '';
 
     const normalized: NormalizedTransactionRow[] = data.map((row, i) => {
