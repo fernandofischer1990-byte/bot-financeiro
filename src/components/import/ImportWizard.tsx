@@ -24,6 +24,7 @@ import { cleanDescription } from '@/lib/descriptionCleaner';
 import { saveImportHistory } from '@/services/importService';
 import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, CategoryMapping } from '@/services/categoryMappingService';
 import { fetchMappingTemplates, saveMappingTemplate, deleteMappingTemplate, MappingTemplate } from '@/services/mappingTemplateService';
+import { categorizeWithAI } from '@/services/categorizationService';
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
