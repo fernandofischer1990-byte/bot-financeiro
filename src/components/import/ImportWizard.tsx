@@ -110,6 +110,7 @@ export function ImportWizard() {
   const [templates, setTemplates] = useState<MappingTemplate[]>([]);
   const [detectionInfo, setDetectionInfo] = useState<DetectionResult | null>(null);
   const [isFallbackMapping, setIsFallbackMapping] = useState(false);
+  const [aiProgress, setAiProgress] = useState<string>('');
   const originalRowsRef = useRef<ImportRow[]>([]);
 
   const { transactions, addMultipleTransactions } = useTransactionsContext();
