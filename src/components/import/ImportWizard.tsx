@@ -389,8 +389,9 @@ export function ImportWizard() {
     setStep('duplicates');
   }, [transactions, userMappings, applyAICategorization]);
 
-  const handleMappingConfirm = useCallback(() => {
-    processSpreadsheetData(rawData, mapping);
+  const handleMappingConfirm = useCallback(async () => {
+    setStep('loading');
+    await processSpreadsheetData(rawData, mapping);
   }, [rawData, mapping, processSpreadsheetData]);
 
   const handleFinalImport = useCallback(async () => {
