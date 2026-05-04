@@ -255,9 +255,11 @@ export function ImportWizard() {
         });
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo QIF');
         setTotalParsed(normalized.length);
-        const withDuplicates = detectDuplicates(normalized as any, transactions);
+        const aiClassified = await applyAICategorization(normalized as any);
+        const withDuplicates = detectDuplicates(aiClassified as any, transactions);
         originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
+        setAiProgress('');
         setStep('duplicates');
         toast({ title: `✅ ${normalized.length} transações extraídas do QIF` });
       } catch (error) {
