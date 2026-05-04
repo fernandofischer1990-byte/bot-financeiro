@@ -38,15 +38,16 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   };
 
   const handleCustomDateSelect = (range: { from?: Date; to?: Date } | undefined) => {
-    if (range?.from && range?.to) {
-      onFiltersChange({
-        ...filters,
-        period: 'custom',
-        startDate: startOfDay(range.from),
-        endDate: endOfDay(range.to),
-      });
-      setIsCustomOpen(false);
-    }
+    if (!range) return;
+    const start = range.from ? startOfDay(range.from) : null;
+    const end = range.to ? endOfDay(range.to) : null;
+    onFiltersChange({
+      ...filters,
+      period: 'custom',
+      startDate: start,
+      endDate: end,
+    });
+    if (start && end) setIsCustomOpen(false);
   };
 
   const clearFilters = () => {
