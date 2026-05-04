@@ -380,11 +380,14 @@ export function ImportWizard() {
     }).filter(r => !r.error && r.amount > 0);
 
     setTotalParsed(normalized.length);
-    const withDuplicates = detectDuplicates(normalized as any, transactions);
+    setStep('loading');
+    const aiClassified = await applyAICategorization(normalized);
+    const withDuplicates = detectDuplicates(aiClassified as any, transactions);
     originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
     setImportRows(withDuplicates);
+    setAiProgress('');
     setStep('duplicates');
-  }, [transactions, userMappings]);
+  }, [transactions, userMappings, applyAICategorization]);
 
   const handleMappingConfirm = useCallback(() => {
     processSpreadsheetData(rawData, mapping);
