@@ -480,17 +480,40 @@ export function ChatInterface() {
                 <div className="text-sm space-y-1 mb-3">
                   <p><span className="text-muted-foreground">Tipo:</span> {pendingAddTransaction.action.type === 'income' ? 'Receita' : 'Despesa'}</p>
                   <p><span className="text-muted-foreground">Valor:</span> {formatCurrency(pendingAddTransaction.action.amount!)}</p>
-                  <p><span className="text-muted-foreground">Categoria:</span> {getCategoryLabel(pendingAddTransaction.action.category!)}</p>
                   {pendingAddTransaction.action.description && (
                     <p><span className="text-muted-foreground">Descrição:</span> {pendingAddTransaction.action.description}</p>
                   )}
                   {pendingAddTransaction.action.date && (
                     <p><span className="text-muted-foreground">Data:</span> {new Date(pendingAddTransaction.action.date).toLocaleDateString('pt-BR')}</p>
                   )}
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-muted-foreground">Categoria:</span>
+                    <Select
+                      value={pendingCategoryOverride || pendingAddTransaction.action.category!}
+                      onValueChange={(v) => setPendingCategoryOverride(v)}
+                    >
+                      <SelectTrigger className="h-7 text-xs flex-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(pendingAddTransaction.action.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(cat => (
+                          <SelectItem key={cat.value} value={cat.value} className="text-xs">
+                            {cat.icon} {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {pendingCategoryOverride && pendingCategoryOverride !== pendingAddTransaction.action.category && (
+                    <p className="text-[11px] text-primary flex items-center gap-1 pt-1">
+                      <Sparkles className="h-3 w-3" />
+                      Vou aprender essa categoria para "{pendingAddTransaction.action.description}"
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={handleConfirmAddTransaction} className="flex-1">Confirmar</Button>
-                  <Button size="sm" variant="outline" onClick={() => setPendingAddTransaction(null)} className="flex-1">Cancelar</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setPendingAddTransaction(null); setPendingCategoryOverride(null); }} className="flex-1">Cancelar</Button>
                 </div>
               </div>
             </div>
