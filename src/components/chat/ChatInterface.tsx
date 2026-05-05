@@ -8,10 +8,12 @@ import { Calendar } from '@/components/ui/calendar';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon } from 'lucide-react';
-import { formatCurrency, getCategoryLabel } from '@/lib/constants';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles } from 'lucide-react';
+import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/constants';
 import { extractAction, ParsedAction } from '@/lib/actionParser';
 import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
+import { saveSingleLearnedMapping } from '@/services/categoryMappingService';
+import { useAuth } from '@/hooks/useAuth';
 import { MessageBubble } from './MessageBubble';
 import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
 import { parseDateOnly } from '@/lib/dateUtils';
@@ -72,12 +74,14 @@ const QUICK_ACTIONS = [
 ];
 
 export function ChatInterface() {
+  const { user } = useAuth();
   const { overallMetrics: metrics, transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
   const [pendingAddTransaction, setPendingAddTransaction] = useState<{ action: ParsedAction, isDuplicate: boolean } | null>(null);
+  const [pendingCategoryOverride, setPendingCategoryOverride] = useState<string | null>(null);
 
   // ── Period filter for chat analysis ─────────────────────────────
   const [chatPeriod, setChatPeriod] = useState<PeriodKey>('all');
@@ -253,23 +257,30 @@ export function ChatInterface() {
   const handleConfirmAddTransaction = async () => {
     if (!pendingAddTransaction) return;
     const { action } = pendingAddTransaction;
+    const finalCategory = pendingCategoryOverride || action.category!;
+    const wasCorrected = pendingCategoryOverride && pendingCategoryOverride !== action.category;
     try {
       const txResult = await addTransaction({
         type: action.type!,
         amount: action.amount!,
-        category: action.category!,
+        category: finalCategory,
         description: action.description || '',
         transaction_date: action.date,
         source: 'chat',
       });
       if (txResult) {
-        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount!)} em ${getCategoryLabel(action.category!)}` });
+        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount!)} em ${getCategoryLabel(finalCategory)}` });
+        if (wasCorrected && user && action.description) {
+          await saveSingleLearnedMapping(user.id, action.description, finalCategory);
+          toast({ title: '🧠 Aprendi essa categoria!', description: 'Vou usar para próximas importações e mensagens.' });
+        }
       }
     } catch (e) {
       console.error('[Chat] addTransaction failed:', e);
       toast({ title: 'Erro ao registrar transação', description: 'Tente novamente.', variant: 'destructive' });
     } finally {
       setPendingAddTransaction(null);
+      setPendingCategoryOverride(null);
     }
   };
 
@@ -469,17 +480,40 @@ export function ChatInterface() {
                 <div className="text-sm space-y-1 mb-3">
                   <p><span className="text-muted-foreground">Tipo:</span> {pendingAddTransaction.action.type === 'income' ? 'Receita' : 'Despesa'}</p>
                   <p><span className="text-muted-foreground">Valor:</span> {formatCurrency(pendingAddTransaction.action.amount!)}</p>
-                  <p><span className="text-muted-foreground">Categoria:</span> {getCategoryLabel(pendingAddTransaction.action.category!)}</p>
                   {pendingAddTransaction.action.description && (
                     <p><span className="text-muted-foreground">Descrição:</span> {pendingAddTransaction.action.description}</p>
                   )}
                   {pendingAddTransaction.action.date && (
                     <p><span className="text-muted-foreground">Data:</span> {new Date(pendingAddTransaction.action.date).toLocaleDateString('pt-BR')}</p>
                   )}
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-muted-foreground">Categoria:</span>
+                    <Select
+                      value={pendingCategoryOverride || pendingAddTransaction.action.category!}
+                      onValueChange={(v) => setPendingCategoryOverride(v)}
+                    >
+                      <SelectTrigger className="h-7 text-xs flex-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(pendingAddTransaction.action.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(cat => (
+                          <SelectItem key={cat.value} value={cat.value} className="text-xs">
+                            {cat.icon} {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {pendingCategoryOverride && pendingCategoryOverride !== pendingAddTransaction.action.category && (
+                    <p className="text-[11px] text-primary flex items-center gap-1 pt-1">
+                      <Sparkles className="h-3 w-3" />
+                      Vou aprender essa categoria para "{pendingAddTransaction.action.description}"
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={handleConfirmAddTransaction} className="flex-1">Confirmar</Button>
-                  <Button size="sm" variant="outline" onClick={() => setPendingAddTransaction(null)} className="flex-1">Cancelar</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setPendingAddTransaction(null); setPendingCategoryOverride(null); }} className="flex-1">Cancelar</Button>
                 </div>
               </div>
             </div>
