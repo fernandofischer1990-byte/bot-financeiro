@@ -257,23 +257,30 @@ export function ChatInterface() {
   const handleConfirmAddTransaction = async () => {
     if (!pendingAddTransaction) return;
     const { action } = pendingAddTransaction;
+    const finalCategory = pendingCategoryOverride || action.category!;
+    const wasCorrected = pendingCategoryOverride && pendingCategoryOverride !== action.category;
     try {
       const txResult = await addTransaction({
         type: action.type!,
         amount: action.amount!,
-        category: action.category!,
+        category: finalCategory,
         description: action.description || '',
         transaction_date: action.date,
         source: 'chat',
       });
       if (txResult) {
-        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount!)} em ${getCategoryLabel(action.category!)}` });
+        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount!)} em ${getCategoryLabel(finalCategory)}` });
+        if (wasCorrected && user && action.description) {
+          await saveSingleLearnedMapping(user.id, action.description, finalCategory);
+          toast({ title: '🧠 Aprendi essa categoria!', description: 'Vou usar para próximas importações e mensagens.' });
+        }
       }
     } catch (e) {
       console.error('[Chat] addTransaction failed:', e);
       toast({ title: 'Erro ao registrar transação', description: 'Tente novamente.', variant: 'destructive' });
     } finally {
       setPendingAddTransaction(null);
+      setPendingCategoryOverride(null);
     }
   };
 
