@@ -74,12 +74,14 @@ const QUICK_ACTIONS = [
 ];
 
 export function ChatInterface() {
+  const { user } = useAuth();
   const { overallMetrics: metrics, transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
   const [pendingAddTransaction, setPendingAddTransaction] = useState<{ action: ParsedAction, isDuplicate: boolean } | null>(null);
+  const [pendingCategoryOverride, setPendingCategoryOverride] = useState<string | null>(null);
 
   // ── Period filter for chat analysis ─────────────────────────────
   const [chatPeriod, setChatPeriod] = useState<PeriodKey>('all');
