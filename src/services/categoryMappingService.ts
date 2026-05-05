@@ -50,6 +50,42 @@ export function findLearnedCategory(description: string, mappings: CategoryMappi
   return null;
 }
 
+export async function saveSingleLearnedMapping(
+  userId: string,
+  description: string,
+  category: string
+): Promise<void> {
+  const pattern = normalizePattern(description);
+  if (!pattern || !category) return;
+  if (category === 'outros_despesa' || category === 'outros_receita') return;
+
+  try {
+    const { data: existing } = await supabase
+      .from('category_mappings')
+      .select('id, usage_count')
+      .eq('user_id', userId)
+      .eq('description_pattern', pattern)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('category_mappings')
+        .update({
+          usage_count: existing.usage_count + 1,
+          category,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('category_mappings')
+        .insert({ user_id: userId, description_pattern: pattern, category, usage_count: 1 });
+    }
+  } catch (e) {
+    console.error('[CategoryMapping] Error saving single mapping:', e);
+  }
+}
+
 export async function saveLearnedMappings(
   userId: string, 
   originalRows: any[], 
