@@ -5,18 +5,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Textarea } from '@/components/ui/textarea';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe } from 'lucide-react';
 import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/constants';
-import { extractAction, ParsedAction } from '@/lib/actionParser';
+import { parseAIResponse, Action } from '@/lib/actionParser';
+import { extractPartialMessage } from '@/lib/streamingMessage';
 import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
 import { saveSingleLearnedMapping } from '@/services/categoryMappingService';
 import { useAuth } from '@/hooks/useAuth';
 import { MessageBubble } from './MessageBubble';
 import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
-import { parseDateOnly } from '@/lib/dateUtils';
+import { parseDateOnly, getLocalISODate } from '@/lib/dateUtils';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -37,33 +39,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { supabase } from '@/integrations/supabase/client';
 
 const CHAT_TIMEOUT_MS = 60000;
-
-function cleanContentForDisplay(content: string): string {
-  try {
-    const startIdx = content.indexOf('{');
-    const endIdx = content.lastIndexOf('}');
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-      const parsed = JSON.parse(content.slice(startIdx, endIdx + 1));
-      if (parsed.message) return parsed.message;
-    }
-  } catch {
-    const match = content.match(/"message"\s*:\s*"([^]*?)(?:(?<!\\)"|$)/);
-    if (match) {
-      return match[1]
-        .replace(/\\n/g, '\n')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\');
-    }
-  }
-  
-  return content
-    .replace(/<!--ACTION:[\s\S]*?-->/g, '')
-    .replace(/```json[\s\S]*?```/g, '')
-    .replace(/```[\s\S]*?```/g, '')
-    .trim();
-}
 
 const QUICK_ACTIONS = [
   { label: 'Adicionar despesa', icon: TrendingDown },
@@ -73,6 +51,20 @@ const QUICK_ACTIONS = [
   { label: 'Score financeiro', icon: Activity },
 ];
 
+type AddTxPayload = Extract<Action, { type: 'add_transaction' }>['payload'];
+type ClarificationPayload = Extract<Action, { type: 'request_clarification' }>['payload'];
+
+interface PendingAdd {
+  original: AddTxPayload;
+  edited: AddTxPayload;
+  isDuplicate: boolean;
+}
+
+function cleanContentForDisplay(content: string): string {
+  // Used for already-stored messages: parse JSON and return message field.
+  return parseAIResponse(content).message || '';
+}
+
 export function ChatInterface() {
   const { user } = useAuth();
   const { overallMetrics: metrics, transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
@@ -80,10 +72,9 @@ export function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
-  const [pendingAddTransaction, setPendingAddTransaction] = useState<{ action: ParsedAction, isDuplicate: boolean } | null>(null);
-  const [pendingCategoryOverride, setPendingCategoryOverride] = useState<string | null>(null);
+  const [pendingAdds, setPendingAdds] = useState<PendingAdd[]>([]);
+  const [activeIntent, setActiveIntent] = useState<ClarificationPayload | null>(null);
 
-  // ── Period filter for chat analysis ─────────────────────────────
   const [chatPeriod, setChatPeriod] = useState<PeriodKey>('all');
   const [customRange, setCustomRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
   const [isCustomOpen, setIsCustomOpen] = useState(false);
@@ -99,7 +90,6 @@ export function ChatInterface() {
     [chatPeriod, customRange]
   );
 
-  // Filter transactions to the active period (if any)
   const periodTransactions = useMemo(() => {
     if (!periodRange.start || !periodRange.end) return transactions;
     return transactions.filter(tx => {
@@ -108,7 +98,6 @@ export function ChatInterface() {
     });
   }, [transactions, periodRange]);
 
-  // ── Computed analytics (scoped to active period) ────────────────
   const periodTotals = useMemo(() => {
     let income = 0, expenses = 0;
     for (const t of periodTransactions) {
@@ -182,7 +171,7 @@ export function ChatInterface() {
     }
   };
 
-  // ── Proactive insights on chat open ─────────────────────────────
+  // Proactive insights
   useEffect(() => {
     if (insightsShownRef.current) return;
     if (messages.length > 0) {
@@ -191,7 +180,6 @@ export function ChatInterface() {
     }
     if (transactions.length === 0) return;
 
-    // Generate an auto-insight message
     const parts: string[] = [];
     parts.push(`📊 **Resumo rápido do mês:**`);
     parts.push(`- Receitas: R$ ${monthlyMetrics.income_month.toFixed(2)}`);
@@ -210,9 +198,8 @@ export function ChatInterface() {
     parts.push('');
     parts.push('Como posso ajudar com suas finanças hoje? 💬');
 
-    const insightMessage = parts.join('\n');
     insightsShownRef.current = true;
-    addMessage('assistant', JSON.stringify({ message: insightMessage }));
+    addMessage('assistant', JSON.stringify({ message: parts.join('\n'), actions: [] }));
   }, [messages.length, transactions.length, monthlyMetrics, savingsRate, healthScore.score, spendingInsights, addMessage]);
 
   useEffect(() => {
@@ -220,67 +207,93 @@ export function ChatInterface() {
       const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     }
-  }, [messages, streamingContent, pendingAddTransaction]);
+  }, [messages, streamingContent, pendingAdds]);
 
-  const parseAIResponse = useCallback(async (content: string) => {
-    const result = extractAction(content);
-    if (!result.success) {
-      console.error("CHAT_ACTION_ERROR", { rawResponse: content, error: result.error });
-      if (result.error && result.error !== 'Nenhuma ação encontrada') {
-        toast({ title: 'Erro de validação', description: 'O assistente tentou executar uma ação inválida.', variant: 'destructive' });
+  // ── Web search via edge function ───────────────────────────────────
+  const runWebSearch = useCallback(async (query: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('web-search', { body: { query } });
+      if (error) throw error;
+      const result = (data as { result?: string })?.result || 'Sem resultados.';
+      await addMessage('assistant', JSON.stringify({ message: `🌐 **Pesquisa:** ${query}\n\n${result}`, actions: [] }));
+    } catch (e) {
+      console.error('[Chat] web_search failed:', e);
+      toast({ title: 'Falha na pesquisa', description: e instanceof Error ? e.message : 'Erro', variant: 'destructive' });
+    }
+  }, [addMessage, toast]);
+
+  // ── Central action handler ─────────────────────────────────────────
+  const handleAction = useCallback(async (action: Action) => {
+    switch (action.type) {
+      case 'add_transaction': {
+        const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000);
+        const isDuplicate = transactions.some(t =>
+          t.type === action.payload.type &&
+          Number(t.amount) === action.payload.amount &&
+          t.category === action.payload.category &&
+          new Date(t.created_at || Date.now()) > twoMinsAgo
+        );
+        setPendingAdds(prev => [...prev, { original: action.payload, edited: { ...action.payload }, isDuplicate }]);
+        break;
       }
+      case 'delete_transaction': {
+        const ok = await deleteTransaction(action.payload.id);
+        if (ok) toast({ title: '🗑️ Transação excluída!' });
+        break;
+      }
+      case 'delete_all_transactions':
+        setPendingDeleteAll({ filter: action.payload.filter });
+        break;
+      case 'web_search':
+        await runWebSearch(action.payload.query);
+        break;
+      case 'request_clarification':
+        setActiveIntent(action.payload);
+        break;
+    }
+  }, [transactions, deleteTransaction, toast, runWebSearch]);
+
+  const updatePending = (idx: number, patch: Partial<AddTxPayload>) => {
+    setPendingAdds(prev => prev.map((p, i) => i === idx ? { ...p, edited: { ...p.edited, ...patch } } : p));
+  };
+
+  const removePending = (idx: number) => {
+    setPendingAdds(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleConfirmAdd = async (idx: number) => {
+    const item = pendingAdds[idx];
+    if (!item) return;
+    const { edited, original } = item;
+    if (!edited.amount || edited.amount <= 0) {
+      toast({ title: 'Valor inválido', variant: 'destructive' });
       return;
     }
-
-    if (!result.action) return;
-
-    const action = result.action;
-
-    if (action.action === 'add_transaction' && action.type && action.amount && action.category) {
-      const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000);
-      const isDuplicate = transactions.some(t => 
-        t.type === action.type && 
-        Number(t.amount) === action.amount && 
-        t.category === action.category &&
-        new Date(t.created_at || Date.now()) > twoMinsAgo
-      );
-
-      setPendingAddTransaction({ action, isDuplicate });
-    } else if (action.action === 'delete_transaction' && action.id) {
-      const success = await deleteTransaction(action.id);
-      if (success) toast({ title: '🗑️ Transação excluída!' });
-    } else if (action.action === 'delete_all_transactions') {
-      setPendingDeleteAll({ filter: action.filter || 'all' });
-    }
-  }, [addTransaction, deleteTransaction, toast, transactions]);
-
-  const handleConfirmAddTransaction = async () => {
-    if (!pendingAddTransaction) return;
-    const { action } = pendingAddTransaction;
-    const finalCategory = pendingCategoryOverride || action.category!;
-    const wasCorrected = pendingCategoryOverride && pendingCategoryOverride !== action.category;
     try {
-      const txResult = await addTransaction({
-        type: action.type!,
-        amount: action.amount!,
-        category: finalCategory,
-        description: action.description || '',
-        transaction_date: action.date,
+      const result = await addTransaction({
+        type: edited.type,
+        amount: edited.amount,
+        category: edited.category,
+        description: edited.description || '',
+        transaction_date: edited.date,
         source: 'chat',
       });
-      if (txResult) {
-        toast({ title: action.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!', description: `${formatCurrency(action.amount!)} em ${getCategoryLabel(finalCategory)}` });
-        if (wasCorrected && user && action.description) {
-          await saveSingleLearnedMapping(user.id, action.description, finalCategory);
+      if (result) {
+        toast({
+          title: edited.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
+          description: `${formatCurrency(edited.amount)} em ${getCategoryLabel(edited.category)}`,
+        });
+        if (user && edited.description && edited.category !== original.category) {
+          await saveSingleLearnedMapping(user.id, edited.description, edited.category);
           toast({ title: '🧠 Aprendi essa categoria!', description: 'Vou usar para próximas importações e mensagens.' });
         }
+        setActiveIntent(null);
       }
     } catch (e) {
       console.error('[Chat] addTransaction failed:', e);
-      toast({ title: 'Erro ao registrar transação', description: 'Tente novamente.', variant: 'destructive' });
+      toast({ title: 'Erro ao registrar transação', variant: 'destructive' });
     } finally {
-      setPendingAddTransaction(null);
-      setPendingCategoryOverride(null);
+      removePending(idx);
     }
   };
 
@@ -290,7 +303,7 @@ export function ChatInterface() {
     setPendingDeleteAll(null);
     if (count > 0) {
       const label = pendingDeleteAll.filter === 'all' ? `todas as ${count} transações` : pendingDeleteAll.filter === 'income' ? `todas as ${count} receitas` : `todas as ${count} despesas`;
-      await addMessage('assistant', `Pronto! Excluí ${label} conforme solicitado. ✅`);
+      await addMessage('assistant', JSON.stringify({ message: `Pronto! Excluí ${label} conforme solicitado. ✅`, actions: [] }));
     }
   };
 
@@ -315,17 +328,27 @@ export function ChatInterface() {
 
     try {
       const trimmedHistory = [...messages, { role: 'user' as const, content: userMessage }].slice(-30);
-      const response = await sendChatMessage(trimmedHistory, chatContext, abortControllerRef.current.signal);
+      // Inject active intent hint as a synthetic system note via context
+      const ctxWithIntent = activeIntent
+        ? { ...chatContext, active_intent: activeIntent } as ChatContext & { active_intent: ClarificationPayload }
+        : chatContext;
+      const response = await sendChatMessage(trimmedHistory, ctxWithIntent, abortControllerRef.current.signal);
 
       let fullContent = '';
       for await (const chunk of readSSEStream(response)) {
         fullContent += chunk;
-        setStreamingContent(cleanContentForDisplay(fullContent));
+        setStreamingContent(extractPartialMessage(fullContent));
       }
 
       if (fullContent) {
         await addMessage('assistant', fullContent);
-        await parseAIResponse(fullContent);
+        const parsed = parseAIResponse(fullContent);
+        // If AI returned a non-clarification action, clear pending intent
+        const hasResolution = parsed.actions.some(a => a.type !== 'request_clarification');
+        if (hasResolution) setActiveIntent(null);
+        for (const action of parsed.actions) {
+          await handleAction(action);
+        }
       }
       setStreamingContent('');
     } catch (error) {
@@ -333,7 +356,7 @@ export function ChatInterface() {
       if (error instanceof Error) {
         errorMessage = error.name === 'AbortError' ? 'Requisição cancelada ou tempo limite excedido' : error.message;
       }
-      console.error("CHAT_ACTION_ERROR", { error: errorMessage });
+      console.error("[Chat] error:", errorMessage);
       toast({ title: 'Erro', description: errorMessage, variant: 'destructive' });
       setStreamingContent('');
     } finally {
@@ -345,17 +368,11 @@ export function ChatInterface() {
 
   const handleClearHistory = async () => {
     insightsShownRef.current = false;
+    setActiveIntent(null);
+    setPendingAdds([]);
     await clearHistory();
     toast({ title: 'Histórico limpo' });
   };
-
-  // Spending alert for pending transaction
-  const spendingAlertText = useMemo(() => {
-    if (!pendingAddTransaction) return null;
-    const { action } = pendingAddTransaction;
-    if (action.type !== 'expense' || !action.amount) return null;
-    return getSpendingAlert(action.amount, monthlyMetrics.income_month);
-  }, [pendingAddTransaction, monthlyMetrics.income_month]);
 
   return (
     <div className="flex flex-col h-full bg-card rounded-xl border shadow-sm">
@@ -384,9 +401,7 @@ export function ChatInterface() {
           </SelectTrigger>
           <SelectContent>
             {PERIOD_OPTIONS.map(opt => (
-              <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                {opt.label}
-              </SelectItem>
+              <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -403,10 +418,7 @@ export function ChatInterface() {
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="range"
-                selected={{
-                  from: customRange.start || undefined,
-                  to: customRange.end || undefined,
-                }}
+                selected={{ from: customRange.start || undefined, to: customRange.end || undefined }}
                 onSelect={handleCustomRangeSelect}
                 locale={ptBR}
                 numberOfMonths={1}
@@ -415,9 +427,9 @@ export function ChatInterface() {
             </PopoverContent>
           </Popover>
         )}
-        {chatPeriod !== 'all' && periodRange.start && periodRange.end && (
-          <span className="text-[11px] text-muted-foreground ml-auto">
-            {periodTransactions.length} transações
+        {activeIntent && (
+          <span className="text-[11px] text-primary ml-auto flex items-center gap-1">
+            <Sparkles className="h-3 w-3" /> Aguardando: {activeIntent.missing_field || activeIntent.intent}
           </span>
         )}
       </div>
@@ -453,7 +465,7 @@ export function ChatInterface() {
 
           {streamingContent && (
             <MessageBubble
-              message={{ id: 'streaming', role: 'assistant', content: streamingContent, user_id: '', metadata: null, created_at: new Date().toISOString() }}
+              message={{ id: 'streaming', role: 'assistant', content: JSON.stringify({ message: streamingContent }), user_id: '', metadata: null, created_at: new Date().toISOString() }}
               cleanContent={cleanContentForDisplay}
             />
           )}
@@ -464,67 +476,30 @@ export function ChatInterface() {
               <span className="text-sm">Analisando...</span>
             </div>
           )}
-          
-          {pendingAddTransaction && (
-            <div className="flex justify-start">
-              <div className="bg-muted p-4 rounded-lg max-w-[85%] border border-border shadow-sm">
-                <h4 className="font-medium text-sm mb-2">Confirmar Transação</h4>
-                {spendingAlertText && (
-                  <div className="text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md px-3 py-1.5 mb-2 font-medium">
-                    {spendingAlertText}
-                  </div>
-                )}
-                {pendingAddTransaction.isDuplicate && (
-                  <p className="text-xs text-destructive mb-2 font-medium">Esta transação parece ser duplicada. Deseja adicionar mesmo assim?</p>
-                )}
-                <div className="text-sm space-y-1 mb-3">
-                  <p><span className="text-muted-foreground">Tipo:</span> {pendingAddTransaction.action.type === 'income' ? 'Receita' : 'Despesa'}</p>
-                  <p><span className="text-muted-foreground">Valor:</span> {formatCurrency(pendingAddTransaction.action.amount!)}</p>
-                  {pendingAddTransaction.action.description && (
-                    <p><span className="text-muted-foreground">Descrição:</span> {pendingAddTransaction.action.description}</p>
-                  )}
-                  {pendingAddTransaction.action.date && (
-                    <p><span className="text-muted-foreground">Data:</span> {new Date(pendingAddTransaction.action.date).toLocaleDateString('pt-BR')}</p>
-                  )}
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="text-muted-foreground">Categoria:</span>
-                    <Select
-                      value={pendingCategoryOverride || pendingAddTransaction.action.category!}
-                      onValueChange={(v) => setPendingCategoryOverride(v)}
-                    >
-                      <SelectTrigger className="h-7 text-xs flex-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(pendingAddTransaction.action.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(cat => (
-                          <SelectItem key={cat.value} value={cat.value} className="text-xs">
-                            {cat.icon} {cat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {pendingCategoryOverride && pendingCategoryOverride !== pendingAddTransaction.action.category && (
-                    <p className="text-[11px] text-primary flex items-center gap-1 pt-1">
-                      <Sparkles className="h-3 w-3" />
-                      Vou aprender essa categoria para "{pendingAddTransaction.action.description}"
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleConfirmAddTransaction} className="flex-1">Confirmar</Button>
-                  <Button size="sm" variant="outline" onClick={() => { setPendingAddTransaction(null); setPendingCategoryOverride(null); }} className="flex-1">Cancelar</Button>
-                </div>
-              </div>
-            </div>
-          )}
+
+          {pendingAdds.map((p, idx) => (
+            <PendingAddCard
+              key={idx}
+              pending={p}
+              monthlyIncome={monthlyMetrics.income_month}
+              onChange={(patch) => updatePending(idx, patch)}
+              onConfirm={() => handleConfirmAdd(idx)}
+              onCancel={() => removePending(idx)}
+            />
+          ))}
         </div>
       </ScrollArea>
 
       {/* Input */}
       <div className="p-4 border-t">
         <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
-          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Pergunte sobre suas finanças..." disabled={isStreaming} className="flex-1" />
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={activeIntent?.missing_field ? `Informe: ${activeIntent.missing_field}...` : 'Pergunte sobre suas finanças...'}
+            disabled={isStreaming}
+            className="flex-1"
+          />
           {isStreaming ? (
             <Button type="button" variant="destructive" size="icon" onClick={cancelStreaming} title="Cancelar">
               <span className="text-xs font-bold">✕</span>
@@ -557,6 +532,128 @@ export function ChatInterface() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// ── Editable confirmation card ──────────────────────────────────────
+interface PendingAddCardProps {
+  pending: PendingAdd;
+  monthlyIncome: number;
+  onChange: (patch: Partial<AddTxPayload>) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function PendingAddCard({ pending, monthlyIncome, onChange, onConfirm, onCancel }: PendingAddCardProps) {
+  const { edited, original, isDuplicate } = pending;
+  const [isDateOpen, setIsDateOpen] = useState(false);
+  const categories = edited.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const alert = edited.type === 'expense' && edited.amount > 0 ? getSpendingAlert(edited.amount, monthlyIncome) : null;
+  const categoryChanged = edited.category !== original.category && edited.description;
+
+  const dateObj = edited.date ? parseDateOnly(edited.date) : new Date();
+
+  return (
+    <div className="flex justify-start">
+      <div className="bg-muted p-4 rounded-lg w-full max-w-[90%] border border-border shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="font-medium text-sm">Confirmar {edited.type === 'income' ? 'Receita' : 'Despesa'}</h4>
+          <Select value={edited.type} onValueChange={(v) => onChange({ type: v as 'income' | 'expense' })}>
+            <SelectTrigger className="h-7 text-xs w-[110px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="income" className="text-xs">Receita</SelectItem>
+              <SelectItem value="expense" className="text-xs">Despesa</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {alert && (
+          <div className="text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md px-3 py-1.5 font-medium">
+            {alert}
+          </div>
+        )}
+        {isDuplicate && (
+          <p className="text-xs text-destructive font-medium">Esta transação parece duplicada. Confirma mesmo assim?</p>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-muted-foreground">Valor</label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={String(edited.amount).replace('.', ',')}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^\d,.-]/g, '').replace(',', '.');
+                const n = parseFloat(raw);
+                onChange({ amount: isNaN(n) ? 0 : Math.abs(n) });
+              }}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] text-muted-foreground">Data</label>
+            <Popover open={isDateOpen} onOpenChange={setIsDateOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs w-full justify-start font-normal">
+                  <CalendarIcon className="h-3 w-3 mr-1.5" />
+                  {format(dateObj, 'dd/MM/yyyy')}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateObj}
+                  onSelect={(d) => {
+                    if (d) {
+                      onChange({ date: getLocalISODate(d) });
+                      setIsDateOpen(false);
+                    }
+                  }}
+                  locale={ptBR}
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] text-muted-foreground">Categoria</label>
+          <Select value={edited.category} onValueChange={(v) => onChange({ category: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {categories.map(cat => (
+                <SelectItem key={cat.value} value={cat.value} className="text-xs">
+                  {cat.icon} {cat.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {categoryChanged && (
+            <p className="text-[11px] text-primary flex items-center gap-1 pt-1">
+              <Sparkles className="h-3 w-3" />
+              Vou aprender essa categoria para "{edited.description}"
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="text-[11px] text-muted-foreground">Descrição</label>
+          <Textarea
+            value={edited.description}
+            onChange={(e) => onChange({ description: e.target.value })}
+            rows={2}
+            className="text-sm min-h-[40px]"
+          />
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" onClick={onConfirm} className="flex-1">Confirmar</Button>
+          <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">Cancelar</Button>
+        </div>
+      </div>
     </div>
   );
 }
