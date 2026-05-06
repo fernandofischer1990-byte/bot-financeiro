@@ -117,7 +117,7 @@ function normalizeAction(raw: unknown): Action | null {
     case 'web_search':
       return { type: 'web_search', payload: { query: a.payload.query.trim() } };
     case 'request_clarification':
-      return { type: 'request_clarification', payload: a.payload };
+      return { type: 'request_clarification', payload: { intent: a.payload.intent || 'unknown', partial: a.payload.partial, missing_field: a.payload.missing_field } };
   }
 }
 
