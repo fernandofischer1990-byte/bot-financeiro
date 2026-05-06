@@ -1,162 +1,152 @@
-// Robust parsing for AI action responses with normalization
+// Robust JSON-based action parser. No regex parsing of action payloads.
 import { z } from 'zod';
 import { normalizeAmount, normalizeCategory } from './transactionNormalization';
 import { normalizeToLocalDate } from './dateUtils';
 
-// Flexible schema that accepts both number and string for amount
-const ActionPayloadSchema = z.object({
-  action: z.enum(['add_transaction', 'delete_transaction', 'delete_all_transactions']),
-  type: z.enum(['income', 'expense']).optional(),
-  amount: z.union([z.number(), z.string()]).optional(),
-  category: z.string().optional(),
-  description: z.string().optional(),
-  date: z.string().optional(),
-  id: z.string().optional(),
-  filter: z.enum(['all', 'income', 'expense']).optional(),
+// ── Discriminated union of action payloads ──────────────────────────
+const AddTransactionSchema = z.object({
+  type: z.literal('add_transaction'),
+  payload: z.object({
+    type: z.enum(['income', 'expense']),
+    amount: z.union([z.number(), z.string()]),
+    category: z.string().optional(),
+    description: z.string().optional(),
+    date: z.string().optional(),
+  }),
 });
+
+const DeleteTransactionSchema = z.object({
+  type: z.literal('delete_transaction'),
+  payload: z.object({ id: z.string() }),
+});
+
+const DeleteAllSchema = z.object({
+  type: z.literal('delete_all_transactions'),
+  payload: z.object({ filter: z.enum(['all', 'income', 'expense']).optional() }).optional(),
+});
+
+const WebSearchSchema = z.object({
+  type: z.literal('web_search'),
+  payload: z.object({ query: z.string().min(1) }),
+});
+
+const RequestClarificationSchema = z.object({
+  type: z.literal('request_clarification'),
+  payload: z.object({
+    intent: z.string(),
+    partial: z.record(z.any()).optional(),
+    missing_field: z.string().optional(),
+  }),
+});
+
+const ActionSchema = z.discriminatedUnion('type', [
+  AddTransactionSchema,
+  DeleteTransactionSchema,
+  DeleteAllSchema,
+  WebSearchSchema,
+  RequestClarificationSchema,
+]);
 
 const AIResponseSchema = z.object({
   message: z.string(),
-  action: ActionPayloadSchema.nullable().optional()
+  // Accept both `actions` (array) and legacy `action` (single object)
+  actions: z.array(z.any()).optional(),
+  action: z.any().optional(),
 });
 
-export interface ParsedAction {
-  action: 'add_transaction' | 'delete_transaction' | 'delete_all_transactions';
-  type?: 'income' | 'expense';
-  amount?: number;
-  category?: string;
-  description?: string;
-  date?: string;
-  id?: string;
-  filter?: 'all' | 'income' | 'expense';
+// ── Public types (normalized) ───────────────────────────────────────
+export type Action =
+  | { type: 'add_transaction'; payload: { type: 'income' | 'expense'; amount: number; category: string; description: string; date: string } }
+  | { type: 'delete_transaction'; payload: { id: string } }
+  | { type: 'delete_all_transactions'; payload: { filter: 'all' | 'income' | 'expense' } }
+  | { type: 'web_search'; payload: { query: string } }
+  | { type: 'request_clarification'; payload: { intent: string; partial?: Record<string, unknown>; missing_field?: string } };
+
+export interface ParsedAIResponse {
+  message: string;
+  actions: Action[];
+  raw?: unknown;
 }
 
-export interface ParseResult {
-  success: boolean;
-  message?: string;
-  action?: ParsedAction;
-  error?: string;
-}
-
-/**
- * Parse and validate AI action response with robust normalization
- */
-export function parseAction(jsonString: string): ParseResult {
+// ── Helpers ─────────────────────────────────────────────────────────
+function tryParseJSON(content: string): unknown | null {
   try {
-    let jsonToParse = jsonString;
-    const startIdx = jsonString.indexOf('{');
-    const endIdx = jsonString.lastIndexOf('}');
-    
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-      jsonToParse = jsonString.slice(startIdx, endIdx + 1);
-    }
-    
-    const rawParsed = JSON.parse(jsonToParse);
-    
-    // Security: Reject prototype pollution attempts (only check own properties)
-    const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(rawParsed, key);
-    if (hasOwn('__proto__') || hasOwn('constructor') || hasOwn('prototype')) {
-      return { success: false, error: 'Propriedades perigosas detectadas' };
-    }
-    
-    // Validate basic structure
-    const validation = AIResponseSchema.safeParse(rawParsed);
-    if (!validation.success) {
-      return { 
-        success: false, 
-        error: `Formato inválido: ${validation.error.message}` 
-      };
-    }
-    
-    const { message, action: rawAction } = validation.data;
-    
-    if (!rawAction) {
-      return { success: true, message };
-    }
-
-    // For delete_transaction, we just need the action and id
-    if (rawAction.action === 'delete_transaction') {
-      if (!rawAction.id) {
-        return { success: false, error: 'ID da transação não fornecido' };
+    return JSON.parse(content);
+  } catch {
+    // Try slicing to outer braces
+    const start = content.indexOf('{');
+    const end = content.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(content.slice(start, end + 1));
+      } catch {
+        return null;
       }
-      return {
-        success: true,
-        message,
-        action: {
-          action: 'delete_transaction',
-          id: rawAction.id,
-        },
-      };
     }
-    
-    // For delete_all_transactions, validate filter
-    if (rawAction.action === 'delete_all_transactions') {
-      return {
-        success: true,
-        message,
-        action: {
-          action: 'delete_all_transactions',
-          filter: rawAction.filter || 'all',
-        },
-      };
-    }
-    
-    // For add_transaction, validate and normalize all fields
-    if (rawAction.action === 'add_transaction') {
-      if (!rawAction.type) {
-        return { success: false, error: 'Tipo da transação não fornecido' };
-      }
-      
-      const amount = normalizeAmount(rawAction.amount);
-      if (amount === null || amount <= 0) {
-        return { success: false, error: 'Valor inválido ou não fornecido' };
-      }
-      
-      const description = rawAction.description?.trim() || '';
-      const category = normalizeCategory(rawAction.category, rawAction.type, description);
-      const date = normalizeToLocalDate(rawAction.date);
-      
-      return {
-        success: true,
-        message,
-        action: {
-          action: 'add_transaction',
-          type: rawAction.type,
-          amount,
-          category,
-          description,
-          date,
-        },
-      };
-    }
-    
-    return { success: true, message, error: 'Ação desconhecida ignorada' };
-  } catch (e) {
-    return { 
-      success: false, 
-      error: e instanceof Error ? e.message : 'Erro ao processar ação' 
-    };
+    return null;
   }
 }
 
-/**
- * Extract action from AI response content
- */
-export function extractAction(content: string): ParseResult {
-  // Support legacy format for compatibility, but prefer JSON parsing
-  const actionMatch = content.match(/<!--ACTION:([\s\S]*?)-->/);
-  if (actionMatch) {
-    try {
-      const rawParsed = JSON.parse(actionMatch[1]);
-      // Wrap it in the new expected structure
-      return parseAction(JSON.stringify({
-        message: content.replace(/<!--ACTION:[\s\S]*?-->/g, '').trim(),
-        action: rawParsed
-      }));
-    } catch {
-      // Fallback
-    }
+function normalizeAction(raw: unknown): Action | null {
+  // Support legacy shape: { action: 'add_transaction', amount, ... }
+  let candidate: unknown = raw;
+  if (raw && typeof raw === 'object' && 'action' in (raw as Record<string, unknown>) && !('type' in (raw as Record<string, unknown>))) {
+    const r = raw as Record<string, unknown>;
+    const actName = r.action as string;
+    const { action: _drop, ...rest } = r;
+    candidate = { type: actName, payload: rest };
   }
-  
-  return parseAction(content);
+
+  const parsed = ActionSchema.safeParse(candidate);
+  if (!parsed.success) return null;
+  const a = parsed.data;
+
+  switch (a.type) {
+    case 'add_transaction': {
+      const amount = normalizeAmount(a.payload.amount);
+      if (amount === null || amount <= 0) return null;
+      const description = (a.payload.description || '').trim();
+      const category = normalizeCategory(a.payload.category, a.payload.type, description);
+      const date = normalizeToLocalDate(a.payload.date);
+      return { type: 'add_transaction', payload: { type: a.payload.type, amount, category, description, date } };
+    }
+    case 'delete_transaction':
+      return { type: 'delete_transaction', payload: { id: a.payload.id } };
+    case 'delete_all_transactions':
+      return { type: 'delete_all_transactions', payload: { filter: a.payload?.filter || 'all' } };
+    case 'web_search':
+      return { type: 'web_search', payload: { query: a.payload.query.trim() } };
+    case 'request_clarification':
+      return { type: 'request_clarification', payload: { intent: a.payload.intent || 'unknown', partial: a.payload.partial, missing_field: a.payload.missing_field } };
+  }
+}
+
+// ── Main parser ─────────────────────────────────────────────────────
+export function parseAIResponse(content: string): ParsedAIResponse {
+  const raw = tryParseJSON(content);
+
+  if (!raw || typeof raw !== 'object') {
+    return { message: content.trim(), actions: [] };
+  }
+
+  const validated = AIResponseSchema.safeParse(raw);
+  if (!validated.success) {
+    // Best-effort: if there's a top-level `message` string, use it
+    const r = raw as Record<string, unknown>;
+    const msg = typeof r.message === 'string' ? r.message : content;
+    return { message: msg, actions: [], raw };
+  }
+
+  const data = validated.data;
+  const rawActions: unknown[] = [];
+  if (Array.isArray(data.actions)) rawActions.push(...data.actions);
+  if (data.action) rawActions.push(data.action);
+
+  const actions: Action[] = [];
+  for (const ra of rawActions) {
+    const norm = normalizeAction(ra);
+    if (norm) actions.push(norm);
+  }
+
+  return { message: data.message, actions, raw };
 }
