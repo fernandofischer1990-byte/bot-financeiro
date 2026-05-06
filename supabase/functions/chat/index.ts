@@ -8,169 +8,109 @@ const corsHeaders = {
 
 const MAX_MESSAGE_LENGTH = 10000;
 const MAX_MESSAGES = 50;
-const MAX_CONTEXT_SIZE = 15000;
+const MAX_CONTEXT_SIZE = 20000;
 
-// Keywords que indicam intenção de busca por informação externa/atualizada
-const WEB_SEARCH_KEYWORDS = [
-  'quanto está', 'quanto custa', 'cotação', 'cotacao', 'dólar', 'dolar', 'euro',
-  'bitcoin', 'btc', 'ethereum', 'selic', 'cdi', 'ipca', 'inflação', 'inflacao',
-  'taxa de juros', 'bolsa', 'ibovespa', 'ações', 'acoes',
-  'o que é', 'o que e', 'como funciona', 'vale a pena', 'qual a diferença',
-  'qual a diferenca', 'me explica', 'explique', 'definição', 'definicao',
-  'tesouro direto', 'lci', 'lca', 'cdb', 'fii', 'renda fixa', 'renda variável',
-  'renda variavel', 'previdência', 'previdencia', 'imposto de renda',
-];
+const SYSTEM_PROMPT = `Você é o FinBot Copilot, um copiloto financeiro inteligente para usuários brasileiros.
 
-function shouldSearchWeb(message: string): boolean {
-  if (!message || message.length < 5) return false;
-  const lower = message.toLowerCase();
-  // Não disparar para comandos de transação ou comandos do app
-  if (lower.startsWith('/')) return false;
-  if (/\bgastei\b|\brecebi\b|\bpaguei\b|\badicionar\b|\bregistrar\b|\bexcluir\b|\bdeletar\b/.test(lower)) {
-    return false;
-  }
-  return WEB_SEARCH_KEYWORDS.some(kw => lower.includes(kw));
-}
+## CONTRATO DE RESPOSTA — OBRIGATÓRIO E ABSOLUTO
 
-const SYSTEM_PROMPT = `Você é o FinBot Copilot, um copiloto financeiro inteligente para usuários brasileiros. Você analisa finanças, detecta padrões, fornece insights proativos e ajuda a tomar melhores decisões financeiras.
-
-## REGRAS CRÍTICAS DE RESPOSTA (OBRIGATÓRIAS):
-1. **SEMPRE** responda com um objeto JSON válido.
-2. **NUNCA** exiba pensamentos, raciocínio ou texto fora do JSON.
-3. O JSON deve seguir exatamente o formato abaixo:
+Você SEMPRE responde com um único objeto JSON válido, no formato:
 
 {
-  "message": "Sua resposta aqui — use markdown: **negrito**, *itálico*, - listas, ## títulos",
-  "action": { ... }
+  "message": "Texto amigável em markdown para o usuário",
+  "actions": [ ... ]
 }
 
-O campo "action" é opcional. A "message" deve usar markdown para formatação rica.
+Regras absolutas:
+1. NUNCA escreva texto fora do JSON.
+2. NUNCA use blocos \`\`\`json — apenas o objeto puro.
+3. "message" é OBRIGATÓRIO (string em PT-BR, com markdown).
+4. "actions" é um ARRAY (pode ser vazio []). Pode conter MÚLTIPLAS ações na mesma resposta.
+5. NUNCA misture pensamentos, raciocínio ou comentários fora do JSON.
 
-## AÇÕES DISPONÍVEIS:
+## TIPOS DE AÇÕES SUPORTADOS
 
-Para adicionar transação:
-"action": {"action":"add_transaction", "type":"expense|income", "amount":100.00, "category":"categoria", "description":"descrição", "date":"YYYY-MM-DD"}
+### add_transaction
+{ "type": "add_transaction", "payload": { "type": "expense"|"income", "amount": 50.00, "category": "alimentacao", "description": "ifood", "date": "YYYY-MM-DD" } }
 
-Para excluir transação:
-"action": {"action":"delete_transaction", "id":"uuid-da-transacao"}
+### delete_transaction
+{ "type": "delete_transaction", "payload": { "id": "uuid" } }
 
-Para excluir TODAS as transações:
-"action": {"action":"delete_all_transactions", "filter":"all|expense|income"}
+### delete_all_transactions
+{ "type": "delete_all_transactions", "payload": { "filter": "all"|"income"|"expense" } }
 
-## CATEGORIAS DISPONÍVEIS:
+### web_search
+Use quando o usuário perguntar sobre informações externas/atualizadas (cotações, taxas, definições, mercado, conceitos financeiros).
+{ "type": "web_search", "payload": { "query": "taxa selic hoje" } }
+
+### request_clarification
+Use quando faltar informação para completar uma intenção (ex: usuário disse "gastei 50" sem dizer categoria).
+{ "type": "request_clarification", "payload": { "intent": "add_transaction", "partial": { "type": "expense", "amount": 50 }, "missing_field": "categoria" } }
+Sua "message" deve perguntar de forma natural pelo campo faltante.
+
+## MULTI-TURN
+Se o contexto contém active_intent (campo intent + partial + missing_field), o usuário está respondendo a uma pergunta de clarificação anterior.
+- Combine "partial" com a nova informação fornecida e emita a action completa (ex: add_transaction).
+- NÃO peça novamente o que já tem.
+
+## CATEGORIAS
 **Despesas:** alimentacao, transporte, moradia, saude, lazer, educacao, vestuario, assinaturas, outros_despesa
 **Receitas:** salario, freelance, investimentos, vendas, outros_receita
 
-## COPILOT CAPABILITIES — ANÁLISE FINANCEIRA:
+Detecção:
+- "uber", "99", "combustível" → transporte
+- "ifood", "mercado", "restaurante" → alimentacao
+- "netflix", "spotify" → assinaturas
+- "aluguel", "luz", "água" → moradia
+- "farmácia", "médico" → saude
 
-### Comando: /monthly_report
-Quando o usuário enviar "/monthly_report" ou pedir um resumo mensal, gere um relatório completo usando os dados do contexto:
-- Total de receitas do mês
-- Total de despesas do mês
-- Saldo do mês
-- Top 3 categorias de gastos
-- Taxa de poupança
-- Score financeiro
-- Maior transação (das recentes)
-Formate o relatório com markdown usando **negrito**, listas e emojis.
+Se a categoria não for clara e a confiança for baixa → request_clarification.
 
-### Análise de Gastos
-Responda perguntas como:
-- "Quanto gastei este mês?" → use expenses_month do contexto
-- "Qual categoria gasto mais?" → use top_categories do contexto
-- "Quanto sobrou?" → use balance e savings_rate
-- "Quanto gastei em alimentação?" → calcule a partir das categorias
+## MÚLTIPLAS TRANSAÇÕES NA MESMA MENSAGEM
+"gastei 50 no uber e 30 no ifood" → 2 actions de add_transaction no array.
 
-### Score Financeiro
-Quando perguntado sobre "score financeiro" ou "saúde financeira":
-- Use o health_score do contexto (0-100)
-- Explique os fatores: taxa de poupança, diversificação de gastos, presença de renda
-- Dê dicas personalizadas baseadas no score
+## COMANDOS ESPECIAIS
+- /monthly_report → relatório mensal completo em markdown (sem actions).
+- "score financeiro" / "saúde financeira" → use health_score do contexto.
 
-### Alertas de Gastos
-Se uma transação sendo adicionada tiver valor > 20% da renda mensal (income_month), alerte no message:
+## ALERTAS
+Se uma despesa > 20% da renda mensal (income_month), inclua na "message":
 "⚠️ Esta compra de R$ X representa Y% da sua renda mensal."
 
-### Detecção Inteligente de Categorias
-Ao registrar transações via chat, detecte a categoria:
-- "Uber", "99", "combustível", "estacionamento" → transporte
-- "Ifood", "mercado", "restaurante", "padaria" → alimentacao
-- "Netflix", "Spotify", "Disney+" → assinaturas
-- "Aluguel", "condomínio", "luz", "água" → moradia
-- "Farmácia", "médico", "consulta" → saude
-Se a confiança for baixa, pergunte ao usuário.
+## DATA
+Use a data de hoje (informada no contexto) se o usuário não especificar.
 
-### Insights Proativos
-Os insights detectados são fornecidos no contexto. Quando relevante, mencione-os nas respostas para ajudar o usuário.
-
-### Consciência de Orçamento
-Se o usuário perguntar sobre orçamento, limites ou metas de gastos:
-Responda: "Você ainda não configurou orçamentos por categoria. Em breve você poderá definir limites mensais para cada categoria e eu avisarei quando estiver próximo de exceder!"
-
-## REGRAS ADICIONAIS:
-- Sempre responda em português brasileiro
-- Use markdown na message: **negrito**, *itálico*, - listas, ## títulos
-- Para valores, interprete como BRL (R$)
-- Se não souber a data, use a data de hoje
-- Se a categoria não for clara, pergunte ao usuário
-- Se o usuário pedir para excluir algo, identifique a transação mais provável no contexto
-- Seja proativo: sugira melhorias financeiras baseadas nos dados do contexto`;
+## IDIOMA
+Sempre PT-BR. Markdown na message: **negrito**, *itálico*, - listas, ## títulos.`;
 
 function verifyAuth(req: Request): { token: string } | { error: Response } {
   const authHeader = req.headers.get("Authorization");
-
   if (!authHeader?.startsWith("Bearer ")) {
-    return {
-      error: new Response(
-        JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      ),
-    };
+    return { error: new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
   }
-
   return { token: authHeader.replace("Bearer ", "") };
 }
 
 async function getAuthenticatedUserId(token: string): Promise<{ userId: string } | { error: Response }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-
   if (!supabaseUrl || !supabaseAnonKey) {
-    return {
-      error: new Response(
-        JSON.stringify({ error: "Configuração de serviço incompleta" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      ),
-    };
+    return { error: new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
   }
-
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
   const { data, error } = await supabase.auth.getUser(token);
-
   if (error || !data?.user) {
-    return {
-      error: new Response(
-        JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      ),
-    };
+    return { error: new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
   }
-
   return { userId: data.user.id };
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const authCheck = verifyAuth(req);
     if ("error" in authCheck) return authCheck.error;
-
     const authResult = await getAuthenticatedUserId(authCheck.token);
     if ("error" in authResult) return authResult.error;
 
@@ -179,17 +119,14 @@ serve(async (req) => {
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "Mensagens inválidas" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
     if (messages.length > MAX_MESSAGES) {
       return new Response(JSON.stringify({ error: "Muitas mensagens no histórico" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
     for (const msg of messages) {
       if (!msg?.role || !msg?.content || typeof msg.content !== 'string' || msg.content.length > MAX_MESSAGE_LENGTH || !['user', 'assistant', 'system'].includes(msg.role)) {
         return new Response(JSON.stringify({ error: "Formato de mensagem inválido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
-
     if (context && JSON.stringify(context).length > MAX_CONTEXT_SIZE) {
       return new Response(JSON.stringify({ error: "Dados de contexto muito grandes" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -199,56 +136,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ── Web Search (simplificado via Lovable AI) ────────────────────
-    const lastUserMessage = [...messages].reverse().find((m: { role: string; content: string }) => m.role === 'user')?.content || '';
-    let webSearchContext = '';
-
-    if (shouldSearchWeb(lastUserMessage)) {
-      console.log("[Chat] WebSearch triggered:", lastUserMessage);
-      try {
-        const searchRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
-            messages: [
-              {
-                role: "system",
-                content: "Você é um assistente de pesquisa financeira para o Brasil. Responda de forma factual, objetiva e concisa (máx 200 palavras). Inclua dados numéricos, taxas, percentuais e definições quando relevante. Se a informação puder estar desatualizada (cotações em tempo real), avise explicitamente."
-              },
-              { role: "user", content: lastUserMessage },
-            ],
-            stream: false,
-          }),
-        });
-
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          const searchText = searchData?.choices?.[0]?.message?.content || '';
-          console.log("[Chat] WebSearch results:", searchText.length);
-          if (searchText) {
-            webSearchContext = `\n\n## INFORMAÇÕES DE PESQUISA (USE NA RESPOSTA):\n${searchText}\n\nNota: Estas informações são baseadas no conhecimento do modelo e podem não refletir valores em tempo real. Sempre avise o usuário quando se tratar de cotações, taxas ou dados de mercado.`;
-          }
-        } else {
-          console.warn("[Chat] WebSearch failed with status:", searchRes.status);
-        }
-      } catch (err) {
-        console.warn("[Chat] WebSearch error (non-fatal):", err);
-      }
-    }
-
     const periodLabel = context?.period_label || 'Todo período';
     const periodStart = context?.period_start;
     const periodEnd = context?.period_end;
-    const periodLine = periodStart && periodEnd
-      ? `${periodLabel} (de ${periodStart} até ${periodEnd})`
-      : periodLabel;
+    const periodLine = periodStart && periodEnd ? `${periodLabel} (de ${periodStart} até ${periodEnd})` : periodLabel;
 
     let contextMessage = `\n\n## PERÍODO DE ANÁLISE ATIVO: ${periodLine}
-(Todos os números abaixo, exceto onde indicado, referem-se a este período. Quando o usuário perguntar sobre "gastos", "receitas" ou "saldo" sem especificar prazo, use estes valores e mencione o período.)
 
 ## DADOS FINANCEIROS DO USUÁRIO (no período):
 - Saldo: R$ ${context?.balance?.toFixed(2) || '0.00'}
@@ -261,7 +154,7 @@ serve(async (req) => {
 - Data de hoje: ${new Date().toISOString().split('T')[0]}`;
 
     if (context?.top_categories && Array.isArray(context.top_categories)) {
-      contextMessage += `\n\n## TOP CATEGORIAS DE GASTOS (mês atual):`;
+      contextMessage += `\n\n## TOP CATEGORIAS DE GASTOS:`;
       for (const cat of context.top_categories) {
         contextMessage += `\n- ${cat.category}: R$ ${Number(cat.amount).toFixed(2)}`;
       }
@@ -269,9 +162,7 @@ serve(async (req) => {
 
     if (context?.insights && Array.isArray(context.insights) && context.insights.length > 0) {
       contextMessage += `\n\n## INSIGHTS DETECTADOS:`;
-      for (const insight of context.insights) {
-        contextMessage += `\n- ${insight}`;
-      }
+      for (const insight of context.insights) contextMessage += `\n- ${insight}`;
     }
 
     if (context?.recentTransactions && Array.isArray(context.recentTransactions)) {
@@ -282,15 +173,19 @@ serve(async (req) => {
       }
     }
 
+    if (context?.active_intent) {
+      contextMessage += `\n\n## INTENT ATIVA (multi-turn):
+O usuário está completando uma intenção anterior. Combine os dados parciais com a nova mensagem e emita a action final.
+Intent: ${context.active_intent.intent}
+Campo faltante: ${context.active_intent.missing_field || 'desconhecido'}
+Dados parciais: ${JSON.stringify(context.active_intent.partial || {})}`;
+    }
+
     contextMessage += `\n\n## ORÇAMENTOS: Não configurados pelo usuário.`;
-    contextMessage += webSearchContext;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
