@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.parse-statement]
 verify_jwt = false
+
+[functions.web-search]
+verify_jwt = false
