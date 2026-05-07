@@ -492,6 +492,13 @@ export function ChatInterface() {
             </div>
           )}
 
+          {webSearching && (
+            <div className="flex gap-2 items-center text-primary">
+              <Globe className="h-4 w-4 animate-pulse" />
+              <span className="text-sm">Pesquisando na internet: <em>{webSearching}</em></span>
+            </div>
+          )}
+
           {pendingAdds.map((p, idx) => (
             <PendingAddCard
               key={idx}
