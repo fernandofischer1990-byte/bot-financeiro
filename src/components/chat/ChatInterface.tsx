@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { getCachedWebSearch, setCachedWebSearch } from '@/lib/webSearchCache';
 
 const CHAT_TIMEOUT_MS = 60000;
 
