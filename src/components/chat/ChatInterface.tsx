@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { getCachedWebSearch, setCachedWebSearch } from '@/lib/webSearchCache';
 
 const CHAT_TIMEOUT_MS = 60000;
 
@@ -213,6 +214,17 @@ export function ChatInterface() {
   const [webSearching, setWebSearching] = useState<string | null>(null);
   const runWebSearch = useCallback(async (query: string) => {
     setWebSearching(query);
+    // Check cache first
+    const cached = getCachedWebSearch(query);
+    if (cached) {
+      console.log('[Chat] web_search cache hit:', query);
+      await addMessage('assistant', JSON.stringify({
+        message: `🌐 **Resultado da pesquisa:** _${query}_\n\n${cached}\n\n_ℹ️ Resultado do cache local — pode variar em tempo real._`,
+        actions: [],
+      }));
+      setWebSearching(null);
+      return;
+    }
     // Placeholder message while searching
     const placeholderMsg = `🌐 **Pesquisando na internet:** _${query}_\n\n⏳ Buscando informações atualizadas...`;
     await addMessage('assistant', JSON.stringify({ message: placeholderMsg, actions: [] }));
@@ -220,6 +232,7 @@ export function ChatInterface() {
       const { data, error } = await supabase.functions.invoke('web-search', { body: { query } });
       if (error) throw error;
       const result = (data as { result?: string })?.result || 'Sem resultados encontrados.';
+      setCachedWebSearch(query, result);
       await addMessage('assistant', JSON.stringify({
         message: `🌐 **Resultado da pesquisa:** _${query}_\n\n${result}\n\n_ℹ️ Informações obtidas via pesquisa na internet — podem variar em tempo real._`,
         actions: [],
