@@ -210,15 +210,30 @@ export function ChatInterface() {
   }, [messages, streamingContent, pendingAdds]);
 
   // ── Web search via edge function ───────────────────────────────────
+  const [webSearching, setWebSearching] = useState<string | null>(null);
   const runWebSearch = useCallback(async (query: string) => {
+    setWebSearching(query);
+    // Placeholder message while searching
+    const placeholderMsg = `🌐 **Pesquisando na internet:** _${query}_\n\n⏳ Buscando informações atualizadas...`;
+    await addMessage('assistant', JSON.stringify({ message: placeholderMsg, actions: [] }));
     try {
       const { data, error } = await supabase.functions.invoke('web-search', { body: { query } });
       if (error) throw error;
-      const result = (data as { result?: string })?.result || 'Sem resultados.';
-      await addMessage('assistant', JSON.stringify({ message: `🌐 **Pesquisa:** ${query}\n\n${result}`, actions: [] }));
+      const result = (data as { result?: string })?.result || 'Sem resultados encontrados.';
+      await addMessage('assistant', JSON.stringify({
+        message: `🌐 **Resultado da pesquisa:** _${query}_\n\n${result}\n\n_ℹ️ Informações obtidas via pesquisa na internet — podem variar em tempo real._`,
+        actions: [],
+      }));
     } catch (e) {
       console.error('[Chat] web_search failed:', e);
-      toast({ title: 'Falha na pesquisa', description: e instanceof Error ? e.message : 'Erro', variant: 'destructive' });
+      const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+      await addMessage('assistant', JSON.stringify({
+        message: `❌ **Falha na pesquisa:** ${msg}\n\nTente novamente em instantes.`,
+        actions: [],
+      }));
+      toast({ title: 'Falha na pesquisa', description: msg, variant: 'destructive' });
+    } finally {
+      setWebSearching(null);
     }
   }, [addMessage, toast]);
 
