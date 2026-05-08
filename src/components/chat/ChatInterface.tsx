@@ -145,6 +145,10 @@ export function ChatInterface() {
     expenses_month: monthlyMetrics.expenses_month,
     savings_rate: savingsRate,
     health_score: healthScore.score,
+    available_balance: metrics.availableBalance,
+    invested_balance: metrics.investedBalance,
+    net_worth: metrics.netWorth,
+    investment_summary: metrics.investmentSummary,
     top_categories: topCategories,
     top_spending_categories: topSpendingCategories,
     recentTransactions,
@@ -305,13 +309,21 @@ export function ChatInterface() {
         description: edited.description || '',
         transaction_date: edited.date,
         source: 'chat',
+        investment_operation: edited.investment_operation,
+        investment_type: edited.investment_type,
+        institution: edited.institution,
       });
       if (result) {
+        const title = edited.type === 'income'
+          ? '💰 Receita adicionada!'
+          : edited.type === 'investment'
+            ? '💼 Investimento registrado!'
+            : '💸 Despesa registrada!';
         toast({
-          title: edited.type === 'income' ? '💰 Receita adicionada!' : '💸 Despesa registrada!',
+          title,
           description: `${formatCurrency(edited.amount)} em ${getCategoryLabel(edited.category)}`,
         });
-        if (user && edited.description && edited.category !== original.category) {
+        if (user && edited.type !== 'investment' && edited.description && edited.category !== original.category) {
           await saveSingleLearnedMapping(user.id, edited.description, edited.category);
           toast({ title: '🧠 Aprendi essa categoria!', description: 'Vou usar para próximas importações e mensagens.' });
         }
