@@ -186,6 +186,9 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          institution: string | null
+          investment_operation: string | null
+          investment_type: string | null
           source: string
           transaction_date: string
           type: Database["public"]["Enums"]["transaction_type"]
@@ -198,6 +201,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          institution?: string | null
+          investment_operation?: string | null
+          investment_type?: string | null
           source?: string
           transaction_date?: string
           type: Database["public"]["Enums"]["transaction_type"]
@@ -210,6 +216,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          institution?: string | null
+          investment_operation?: string | null
+          investment_type?: string | null
           source?: string
           transaction_date?: string
           type?: Database["public"]["Enums"]["transaction_type"]
@@ -241,7 +250,7 @@ export type Database = {
         | "freelance"
         | "investimentos"
         | "outros_receita"
-      transaction_type: "income" | "expense"
+      transaction_type: "income" | "expense" | "investment"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -386,7 +395,7 @@ export const Constants = {
         "investimentos",
         "outros_receita",
       ],
-      transaction_type: ["income", "expense"],
+      transaction_type: ["income", "expense", "investment"],
     },
   },
 } as const
