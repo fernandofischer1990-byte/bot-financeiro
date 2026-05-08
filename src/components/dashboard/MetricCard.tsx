@@ -7,7 +7,7 @@ interface MetricCardProps {
   title: string;
   value: number;
   icon: LucideIcon;
-  variant?: 'default' | 'income' | 'expense';
+  variant?: 'default' | 'income' | 'expense' | 'investment' | 'networth';
   className?: string;
 }
 
@@ -22,6 +22,8 @@ export function MetricCard({ title, value, icon: Icon, variant = 'default', clas
               'text-2xl font-bold tracking-tight',
               variant === 'income' && 'text-success',
               variant === 'expense' && 'text-destructive',
+              variant === 'investment' && 'text-primary',
+              variant === 'networth' && 'text-accent-foreground',
             )}>
               {formatCurrency(value)}
             </p>
@@ -31,6 +33,8 @@ export function MetricCard({ title, value, icon: Icon, variant = 'default', clas
             variant === 'default' && 'bg-primary/10 text-primary',
             variant === 'income' && 'bg-success/10 text-success',
             variant === 'expense' && 'bg-destructive/10 text-destructive',
+            variant === 'investment' && 'bg-primary/10 text-primary',
+            variant === 'networth' && 'bg-accent/30 text-accent-foreground',
           )}>
             <Icon className="h-5 w-5" />
           </div>
