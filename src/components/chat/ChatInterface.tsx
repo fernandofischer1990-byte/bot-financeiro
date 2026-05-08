@@ -103,7 +103,7 @@ export function ChatInterface() {
     let income = 0, expenses = 0;
     for (const t of periodTransactions) {
       if (t.type === 'income') income += Number(t.amount);
-      else expenses += Number(t.amount);
+      else if (t.type === 'expense') expenses += Number(t.amount);
     }
     return { income, expenses, balance: income - expenses };
   }, [periodTransactions]);
