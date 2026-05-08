@@ -5,9 +5,10 @@ import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ChatInterface } from '@/components/chat/ChatInterface';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { ImportWizard } from '@/components/import/ImportWizard';
+import { InvestmentsTab } from '@/components/investments/InvestmentsTab';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, LogOut, Wallet, LayoutDashboard, MessageSquare, Plus, Upload } from 'lucide-react';
+import { Loader2, LogOut, Wallet, LayoutDashboard, MessageSquare, Plus, Upload, Briefcase } from 'lucide-react';
 
 export default function Index() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -62,10 +63,14 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-4">
+          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-5">
             <TabsTrigger value="dashboard" className="flex items-center gap-1.5">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
+            </TabsTrigger>
+            <TabsTrigger value="investments" className="flex items-center gap-1.5">
+              <Briefcase className="h-4 w-4" />
+              <span className="hidden sm:inline">Investimentos</span>
             </TabsTrigger>
             <TabsTrigger value="chat" className="flex items-center gap-1.5">
               <MessageSquare className="h-4 w-4" />
@@ -93,6 +98,10 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
               onUpdateTransaction={updateTransaction}
               onRetry={refetch}
             />
+          </TabsContent>
+
+          <TabsContent value="investments">
+            <InvestmentsTab />
           </TabsContent>
 
           <TabsContent value="chat" className="h-[calc(100vh-200px)]">

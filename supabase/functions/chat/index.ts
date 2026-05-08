@@ -37,17 +37,39 @@ Você DEVE responder SEMPRE em JSON válido.
 
 ## ⚙️ AÇÕES SUPORTADAS
 
-### 1. Adicionar transação
+### 1. Adicionar transação (receita, despesa OU investimento)
 {
   "type": "add_transaction",
   "payload": {
-    "type": "income" | "expense",
+    "type": "income" | "expense" | "investment",
     "amount": number,
-    "category": "string",
+    "category": "string (apenas para income/expense)",
     "description": "string",
-    "date": "YYYY-MM-DD"
+    "date": "YYYY-MM-DD",
+    "investment_operation": "deposit" | "withdraw" | "yield" | "loss",
+    "investment_type": "cdb" | "tesouro_direto" | "acoes" | "fii" | "criptomoedas" | "previdencia" | "poupanca" | "etf" | "renda_fixa" | "outros",
+    "institution": "string opcional"
   }
 }
+
+Investimento NUNCA é despesa. Use type=investment com investment_operation e investment_type quando o usuário disser:
+"investi", "apliquei", "aporte", "comprei ações/cripto/CDB", "resgatei", "rendimento", "lucro", "prejuízo", "tesouro", "ETF", "FII", "previdência", "corretora".
+
+Mapeamento de palavras → investment_type:
+- CDB / RDB / LCI / LCA → cdb (ou renda_fixa)
+- Tesouro / Selic / IPCA / prefixado → tesouro_direto
+- Ações / B3 / ITSA4 / PETR4 → acoes
+- FII / fundo imobiliário / HGLG11 → fii
+- Bitcoin / cripto / ETH → criptomoedas
+- Previdência / PGBL / VGBL → previdencia
+- Poupança → poupanca
+- ETF / BOVA11 / IVVB11 → etf
+
+Mapeamento de palavras → investment_operation:
+- investi / apliquei / aporte / comprei → deposit
+- resgatei / vendi (investimento) / saquei → withdraw
+- rendimento / juros / lucro / dividendo → yield
+- prejuízo / perda / perdi → loss
 
 ### 2. Deletar transação
 { "type": "delete_transaction", "payload": { "id": "string" } }
@@ -56,7 +78,6 @@ Você DEVE responder SEMPRE em JSON válido.
 { "type": "delete_all_transactions", "payload": { "filter": "all" | "income" | "expense" } }
 
 ### 4. Buscar na internet
-Use quando o usuário perguntar sobre informações externas/atualizadas (cotações, taxas Selic, definições, mercado, conceitos financeiros).
 { "type": "web_search", "payload": { "query": "string" } }
 
 ## 🧠 REGRAS DE INTERPRETAÇÃO
@@ -251,10 +272,19 @@ serve(async (req) => {
       for (const insight of context.insights) contextMessage += `\n- ${insight}`;
     }
 
+    contextMessage += `\n\n## PATRIMÔNIO:
+- Saldo Disponível: R$ ${(context?.available_balance ?? 0).toFixed(2)}
+- Saldo Investido: R$ ${(context?.invested_balance ?? 0).toFixed(2)}
+- Patrimônio Total: R$ ${(context?.net_worth ?? 0).toFixed(2)}`;
+    if (context?.investment_summary) {
+      const s = context.investment_summary;
+      contextMessage += `\n- Aportes acumulados: R$ ${Number(s.deposits || 0).toFixed(2)} | Resgates: R$ ${Number(s.withdraws || 0).toFixed(2)} | Rendimentos: R$ ${Number(s.yields || 0).toFixed(2)} | Prejuízos: R$ ${Number(s.losses || 0).toFixed(2)}`;
+    }
+
     if (context?.recentTransactions && Array.isArray(context.recentTransactions)) {
       contextMessage += `\n\n## TRANSAÇÕES RECENTES (para referência em exclusões):`;
       for (const tx of context.recentTransactions.slice(0, 10)) {
-        const typeLabel = tx.type === 'income' ? 'Receita' : 'Despesa';
+        const typeLabel = tx.type === 'income' ? 'Receita' : tx.type === 'investment' ? 'Investimento' : 'Despesa';
         contextMessage += `\n- ID: ${tx.id} | ${typeLabel}: R$ ${Number(tx.amount).toFixed(2)} | Categoria: ${tx.category} | Data: ${tx.date}${tx.description ? ` | Descrição: ${tx.description}` : ''}`;
       }
     }

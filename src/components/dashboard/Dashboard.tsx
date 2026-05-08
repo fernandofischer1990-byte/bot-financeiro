@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { MetricCard } from './MetricCard';
 import { CategoryChart } from './CategoryChart';
 import { MonthlyChart } from './MonthlyChart';
+import { PatrimonyDistributionChart } from './PatrimonyDistributionChart';
+import { NetWorthChart } from './NetWorthChart';
 import { TransactionList } from './TransactionList';
 import { DashboardFilters, FilterState, defaultFilters } from './DashboardFilters';
 import { EditTransactionDialog } from './EditTransactionDialog';
 import { TransactionMetrics, Transaction } from '@/contexts/TransactionsContext';
-import { Wallet, TrendingUp, TrendingDown, RefreshCw, AlertCircle } from 'lucide-react';
+import { Wallet, Briefcase, Coins, TrendingUp, TrendingDown, RefreshCw, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 
@@ -98,14 +100,30 @@ export function Dashboard({
       {/* Filters */}
       <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} />
 
-      {/* Metric Cards */}
+      {/* Metric Cards — Patrimônio */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
-          title="Saldo Total"
-          value={metrics.totalBalance}
+          title="Saldo Disponível"
+          value={metrics.availableBalance}
           icon={Wallet}
           variant="default"
         />
+        <MetricCard
+          title="Investimentos"
+          value={metrics.investedBalance}
+          icon={Briefcase}
+          variant="investment"
+        />
+        <MetricCard
+          title="Patrimônio Total"
+          value={metrics.netWorth}
+          icon={Coins}
+          variant="networth"
+        />
+      </div>
+
+      {/* Metric Cards — Receitas/Despesas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MetricCard
           title="Total de Receitas"
           value={metrics.totalIncome}
@@ -124,6 +142,8 @@ export function Dashboard({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <CategoryChart data={metrics.byCategory} />
         <MonthlyChart data={metrics.monthlyData} />
+        <PatrimonyDistributionChart available={metrics.availableBalance} invested={metrics.investedBalance} />
+        <NetWorthChart data={metrics.monthlyNetWorth} />
       </div>
 
       {/* Transaction List */}

@@ -36,7 +36,7 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
 
   useEffect(() => {
     if (transaction) {
-      setType(transaction.type);
+      setType(transaction.type === 'investment' ? 'expense' : transaction.type);
       setAmount(formatAmountBR(transaction.amount));
       setCategory(transaction.category);
       setDescription(transaction.description || '');

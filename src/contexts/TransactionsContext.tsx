@@ -13,10 +13,13 @@ import {
   deleteUserTransactions,
 } from '@/services/transactionService';
 
+export type TransactionType = 'income' | 'expense' | 'investment';
+export type InvestmentOperation = 'deposit' | 'withdraw' | 'yield' | 'loss';
+
 export interface Transaction {
   id: string;
   user_id: string;
-  type: 'income' | 'expense';
+  type: TransactionType;
   amount: number;
   category: string;
   description: string | null;
@@ -24,23 +27,42 @@ export interface Transaction {
   source: 'manual' | 'chat' | 'upload';
   created_at: string;
   updated_at: string;
+  investment_operation?: InvestmentOperation | null;
+  investment_type?: string | null;
+  institution?: string | null;
 }
 
 export interface TransactionInput {
-  type: 'income' | 'expense';
+  type: TransactionType;
   amount: number;
   category: string;
   description?: string;
   transaction_date?: string;
   source?: 'manual' | 'chat' | 'upload';
+  investment_operation?: InvestmentOperation;
+  investment_type?: string;
+  institution?: string;
+}
+
+export interface InvestmentSummary {
+  deposits: number;
+  withdraws: number;
+  yields: number;
+  losses: number;
+  byType: Record<string, number>;
 }
 
 export interface TransactionMetrics {
-  totalBalance: number;
+  totalBalance: number; // alias of availableBalance (back-compat)
+  availableBalance: number;
+  investedBalance: number;
+  netWorth: number;
   totalIncome: number;
   totalExpenses: number;
   byCategory: Record<string, number>;
   monthlyData: { month: string; income: number; expenses: number }[];
+  investmentSummary: InvestmentSummary;
+  monthlyNetWorth: { month: string; available: number; invested: number; total: number }[];
 }
 
 interface TransactionsContextValue {

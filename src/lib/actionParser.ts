@@ -7,11 +7,14 @@ import { normalizeToLocalDate } from './dateUtils';
 const AddTransactionSchema = z.object({
   type: z.literal('add_transaction'),
   payload: z.object({
-    type: z.enum(['income', 'expense']),
+    type: z.enum(['income', 'expense', 'investment']),
     amount: z.union([z.number(), z.string()]),
     category: z.string().optional(),
     description: z.string().optional(),
     date: z.string().optional(),
+    investment_operation: z.enum(['deposit', 'withdraw', 'yield', 'loss']).optional(),
+    investment_type: z.string().optional(),
+    institution: z.string().optional(),
   }),
 });
 
@@ -56,7 +59,19 @@ const AIResponseSchema = z.object({
 
 // ── Public types (normalized) ───────────────────────────────────────
 export type Action =
-  | { type: 'add_transaction'; payload: { type: 'income' | 'expense'; amount: number; category: string; description: string; date: string } }
+  | {
+      type: 'add_transaction';
+      payload: {
+        type: 'income' | 'expense' | 'investment';
+        amount: number;
+        category: string;
+        description: string;
+        date: string;
+        investment_operation?: 'deposit' | 'withdraw' | 'yield' | 'loss';
+        investment_type?: string;
+        institution?: string;
+      };
+    }
   | { type: 'delete_transaction'; payload: { id: string } }
   | { type: 'delete_all_transactions'; payload: { filter: 'all' | 'income' | 'expense' } }
   | { type: 'web_search'; payload: { query: string } }
@@ -106,9 +121,28 @@ function normalizeAction(raw: unknown): Action | null {
       const amount = normalizeAmount(a.payload.amount);
       if (amount === null || amount <= 0) return null;
       const description = (a.payload.description || '').trim();
-      const category = normalizeCategory(a.payload.category, a.payload.type, description);
       const date = normalizeToLocalDate(a.payload.date);
-      return { type: 'add_transaction', payload: { type: a.payload.type, amount, category, description, date } };
+      if (a.payload.type === 'investment') {
+        const op = a.payload.investment_operation;
+        if (!op) return null;
+        const invType = a.payload.investment_type || 'outros';
+        return {
+          type: 'add_transaction',
+          payload: {
+            type: 'investment',
+            amount,
+            category: 'investimento',
+            description,
+            date,
+            investment_operation: op,
+            investment_type: invType,
+            institution: a.payload.institution,
+          },
+        };
+      }
+      const txType = a.payload.type as 'income' | 'expense';
+      const category = normalizeCategory(a.payload.category, txType, description);
+      return { type: 'add_transaction', payload: { type: txType, amount, category, description, date } };
     }
     case 'delete_transaction':
       return { type: 'delete_transaction', payload: { id: a.payload.id } };
