@@ -1,12 +1,15 @@
 import { supabase } from '@/integrations/supabase/client';
-import { Transaction, TransactionInput } from '@/contexts/TransactionsContext';
+import { Transaction, TransactionInput, InvestmentOperation } from '@/contexts/TransactionsContext';
 import { getLocalISODate } from '@/lib/dateUtils';
 
 function castTransaction(tx: Record<string, unknown>): Transaction {
   return {
     ...tx,
-    type: tx.type as 'income' | 'expense',
+    type: tx.type as 'income' | 'expense' | 'investment',
     source: tx.source as 'manual' | 'chat' | 'upload',
+    investment_operation: (tx.investment_operation as InvestmentOperation | null | undefined) ?? null,
+    investment_type: (tx.investment_type as string | null | undefined) ?? null,
+    institution: (tx.institution as string | null | undefined) ?? null,
   } as Transaction;
 }
 
