@@ -5,9 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Transaction } from '@/contexts/TransactionsContext';
-import { formatCurrency, formatDate, getCategoryLabel, getCategoryIcon } from '@/lib/constants';
+import { formatCurrency, formatDate, getCategoryLabel, getCategoryIcon, getInvestmentTypeLabel, getInvestmentTypeIcon, getInvestmentOperationLabel } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-import { Trash2, ArrowUpCircle, ArrowDownCircle, Pencil, ArrowUpDown } from 'lucide-react';
+import { Trash2, ArrowUpCircle, ArrowDownCircle, Briefcase, Pencil, ArrowUpDown } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -110,40 +110,62 @@ export function TransactionList({
                       {getDateGroupLabel(dateKey)}
                     </span>
                   </div>
-                  {groupedTransactions[dateKey].map((tx) => (
+                  {groupedTransactions[dateKey].map((tx) => {
+                    const isInvestment = tx.type === 'investment';
+                    const op = tx.investment_operation;
+                    // Sign for visual amount: deposits/yields -> positive towards invested; withdraws/losses -> negative
+                    const isPositiveOp = op === 'withdraw' || op === 'yield';
+                    return (
                     <div key={tx.id} className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           'p-2 rounded-lg',
-                          tx.type === 'income' ? 'bg-success/10' : 'bg-destructive/10'
+                          tx.type === 'income' && 'bg-success/10',
+                          tx.type === 'expense' && 'bg-destructive/10',
+                          isInvestment && 'bg-primary/10'
                         )}>
                           {tx.type === 'income' ? (
                             <ArrowUpCircle className="h-4 w-4 text-success" />
+                          ) : isInvestment ? (
+                            <Briefcase className="h-4 w-4 text-primary" />
                           ) : (
                             <ArrowDownCircle className="h-4 w-4 text-destructive" />
                           )}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{getCategoryIcon(tx.category)}</span>
-                            <span className="font-medium text-sm">{getCategoryLabel(tx.category)}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-lg">
+                              {isInvestment ? getInvestmentTypeIcon(tx.investment_type) : getCategoryIcon(tx.category)}
+                            </span>
+                            <span className="font-medium text-sm">
+                              {isInvestment ? getInvestmentTypeLabel(tx.investment_type) : getCategoryLabel(tx.category)}
+                            </span>
+                            {isInvestment && op && (
+                              <Badge variant="secondary" className="text-xs">
+                                {getInvestmentOperationLabel(op)}
+                              </Badge>
+                            )}
                             <Badge variant="outline" className="text-xs">
                               {tx.source === 'chat' ? 'Chat' : tx.source === 'upload' ? 'Upload' : 'Manual'}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {tx.description || 'Sem descrição'}
+                            {tx.institution ? `${tx.institution} · ` : ''}
+                            {tx.description || (isInvestment ? 'Movimentação de investimento' : 'Sem descrição')}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={cn(
                           'font-semibold',
-                          tx.type === 'income' ? 'text-success' : 'text-destructive'
+                          tx.type === 'income' && 'text-success',
+                          tx.type === 'expense' && 'text-destructive',
+                          isInvestment && (isPositiveOp ? 'text-success' : 'text-primary')
                         )}>
-                          {tx.type === 'income' ? '+' : '-'}{formatCurrency(Number(tx.amount))}
+                          {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : (isPositiveOp ? '+' : '−')}
+                          {formatCurrency(Number(tx.amount))}
                         </span>
-                        {onEdit && (
+                        {onEdit && !isInvestment && (
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -165,7 +187,8 @@ export function TransactionList({
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ))}
             </div>
