@@ -100,6 +100,10 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
             />
           </TabsContent>
 
+          <TabsContent value="investments">
+            <InvestmentsTab />
+          </TabsContent>
+
           <TabsContent value="chat" className="h-[calc(100vh-200px)]">
             <ChatInterface />
           </TabsContent>
