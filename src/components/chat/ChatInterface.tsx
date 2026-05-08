@@ -10,7 +10,7 @@ import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe } from 'lucide-react';
-import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/constants';
+import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INVESTMENT_TYPES, INVESTMENT_OPERATIONS, getInvestmentTypeLabel, getInvestmentOperationLabel } from '@/lib/constants';
 import { parseAIResponse, Action } from '@/lib/actionParser';
 import { extractPartialMessage } from '@/lib/streamingMessage';
 import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
@@ -595,22 +595,26 @@ interface PendingAddCardProps {
 function PendingAddCard({ pending, monthlyIncome, onChange, onConfirm, onCancel }: PendingAddCardProps) {
   const { edited, original, isDuplicate } = pending;
   const [isDateOpen, setIsDateOpen] = useState(false);
+  const isInvestment = edited.type === 'investment';
   const categories = edited.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const alert = edited.type === 'expense' && edited.amount > 0 ? getSpendingAlert(edited.amount, monthlyIncome) : null;
-  const categoryChanged = edited.category !== original.category && edited.description;
+  const categoryChanged = !isInvestment && edited.category !== original.category && edited.description;
 
   const dateObj = edited.date ? parseDateOnly(edited.date) : new Date();
+
+  const title = isInvestment ? 'Confirmar Investimento' : edited.type === 'income' ? 'Confirmar Receita' : 'Confirmar Despesa';
 
   return (
     <div className="flex justify-start">
       <div className="bg-muted p-4 rounded-lg w-full max-w-[90%] border border-border shadow-sm space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="font-medium text-sm">Confirmar {edited.type === 'income' ? 'Receita' : 'Despesa'}</h4>
-          <Select value={edited.type} onValueChange={(v) => onChange({ type: v as 'income' | 'expense' })}>
-            <SelectTrigger className="h-7 text-xs w-[110px]"><SelectValue /></SelectTrigger>
+          <h4 className="font-medium text-sm">{title}</h4>
+          <Select value={edited.type} onValueChange={(v) => onChange({ type: v as 'income' | 'expense' | 'investment' })}>
+            <SelectTrigger className="h-7 text-xs w-[130px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="income" className="text-xs">Receita</SelectItem>
               <SelectItem value="expense" className="text-xs">Despesa</SelectItem>
+              <SelectItem value="investment" className="text-xs">Investimento</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -666,25 +670,67 @@ function PendingAddCard({ pending, monthlyIncome, onChange, onConfirm, onCancel 
           </div>
         </div>
 
-        <div>
-          <label className="text-[11px] text-muted-foreground">Categoria</label>
-          <Select value={edited.category} onValueChange={(v) => onChange({ category: v })}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {categories.map(cat => (
-                <SelectItem key={cat.value} value={cat.value} className="text-xs">
-                  {cat.icon} {cat.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {categoryChanged && (
-            <p className="text-[11px] text-primary flex items-center gap-1 pt-1">
-              <Sparkles className="h-3 w-3" />
-              Vou aprender essa categoria para "{edited.description}"
-            </p>
-          )}
-        </div>
+        {isInvestment ? (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-muted-foreground">Operação</label>
+              <Select
+                value={edited.investment_operation || 'deposit'}
+                onValueChange={(v) => onChange({ investment_operation: v as 'deposit' | 'withdraw' | 'yield' | 'loss' })}
+              >
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INVESTMENT_OPERATIONS.map(op => (
+                    <SelectItem key={op.value} value={op.value} className="text-xs">{op.icon} {op.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Tipo</label>
+              <Select
+                value={edited.investment_type || 'outros'}
+                onValueChange={(v) => onChange({ investment_type: v })}
+              >
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INVESTMENT_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value} className="text-xs">{t.icon} {t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-[11px] text-muted-foreground">Instituição (opcional)</label>
+              <Input
+                value={edited.institution || ''}
+                onChange={(e) => onChange({ institution: e.target.value })}
+                placeholder="Ex: Nubank, XP, BTG..."
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="text-[11px] text-muted-foreground">Categoria</label>
+            <Select value={edited.category} onValueChange={(v) => onChange({ category: v })}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {categories.map(cat => (
+                  <SelectItem key={cat.value} value={cat.value} className="text-xs">
+                    {cat.icon} {cat.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {categoryChanged && (
+              <p className="text-[11px] text-primary flex items-center gap-1 pt-1">
+                <Sparkles className="h-3 w-3" />
+                Vou aprender essa categoria para "{edited.description}"
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="text-[11px] text-muted-foreground">Descrição</label>
