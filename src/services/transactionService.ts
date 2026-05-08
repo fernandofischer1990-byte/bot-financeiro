@@ -21,7 +21,7 @@ export async function fetchUserTransactions(userId: string): Promise<{ data: Tra
   try {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id')
+      .select('id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,investment_operation,investment_type,institution')
       .eq('user_id', userId)
       .order('transaction_date', { ascending: false })
       .limit(1000);
@@ -55,6 +55,9 @@ export async function insertTransaction(
       description: input.description || null,
       transaction_date: input.transaction_date || getLocalISODate(),
       source: input.source || 'manual',
+      investment_operation: input.type === 'investment' ? input.investment_operation ?? null : null,
+      investment_type: input.type === 'investment' ? input.investment_type ?? null : null,
+      institution: input.type === 'investment' ? input.institution ?? null : null,
     })
     .select()
     .single();
@@ -83,6 +86,9 @@ export async function insertMultipleTransactions(
         description: input.description || null,
         transaction_date: input.transaction_date || getLocalISODate(),
         source: input.source || 'upload',
+        investment_operation: input.type === 'investment' ? input.investment_operation ?? null : null,
+        investment_type: input.type === 'investment' ? input.investment_type ?? null : null,
+        institution: input.type === 'investment' ? input.institution ?? null : null,
       }))
     )
     .select();
