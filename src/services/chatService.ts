@@ -8,6 +8,16 @@ export interface ChatContext {
   expenses_month: number;
   savings_rate: number;
   health_score: number;
+  available_balance: number;
+  invested_balance: number;
+  net_worth: number;
+  investment_summary: {
+    deposits: number;
+    withdraws: number;
+    yields: number;
+    losses: number;
+    byType: Record<string, number>;
+  };
   top_categories: { category: string; amount: number }[];
   top_spending_categories?: Record<string, number>;
   recentTransactions: {

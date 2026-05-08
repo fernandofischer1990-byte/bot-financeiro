@@ -7,11 +7,14 @@ import { normalizeToLocalDate } from './dateUtils';
 const AddTransactionSchema = z.object({
   type: z.literal('add_transaction'),
   payload: z.object({
-    type: z.enum(['income', 'expense']),
+    type: z.enum(['income', 'expense', 'investment']),
     amount: z.union([z.number(), z.string()]),
     category: z.string().optional(),
     description: z.string().optional(),
     date: z.string().optional(),
+    investment_operation: z.enum(['deposit', 'withdraw', 'yield', 'loss']).optional(),
+    investment_type: z.string().optional(),
+    institution: z.string().optional(),
   }),
 });
 
