@@ -20,7 +20,42 @@ export const INCOME_CATEGORIES = [
   { value: 'outros_receita', label: 'Outros', icon: '💵' },
 ] as const;
 
+export const INVESTMENT_TYPES = [
+  { value: 'cdb', label: 'CDB', icon: '🏦' },
+  { value: 'tesouro_direto', label: 'Tesouro Direto', icon: '🇧🇷' },
+  { value: 'acoes', label: 'Ações', icon: '📈' },
+  { value: 'fii', label: 'Fundos Imobiliários', icon: '🏢' },
+  { value: 'criptomoedas', label: 'Criptomoedas', icon: '₿' },
+  { value: 'previdencia', label: 'Previdência', icon: '👴' },
+  { value: 'poupanca', label: 'Poupança', icon: '🐷' },
+  { value: 'etf', label: 'ETF', icon: '📊' },
+  { value: 'renda_fixa', label: 'Renda Fixa', icon: '💼' },
+  { value: 'outros', label: 'Outros', icon: '📦' },
+] as const;
+
+export const INVESTMENT_OPERATIONS = [
+  { value: 'deposit', label: 'Aporte', icon: '⬆️', sign: 1 },
+  { value: 'withdraw', label: 'Resgate', icon: '⬇️', sign: -1 },
+  { value: 'yield', label: 'Rendimento', icon: '✨', sign: 1 },
+  { value: 'loss', label: 'Prejuízo', icon: '⚠️', sign: -1 },
+] as const;
+
 export const ALL_CATEGORIES = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
+
+export const getInvestmentTypeLabel = (value?: string | null): string => {
+  if (!value) return 'Investimento';
+  return INVESTMENT_TYPES.find(t => t.value === value)?.label ?? value;
+};
+
+export const getInvestmentTypeIcon = (value?: string | null): string => {
+  if (!value) return '💼';
+  return INVESTMENT_TYPES.find(t => t.value === value)?.icon ?? '💼';
+};
+
+export const getInvestmentOperationLabel = (value?: string | null): string => {
+  if (!value) return '';
+  return INVESTMENT_OPERATIONS.find(o => o.value === value)?.label ?? value;
+};
 
 export const CATEGORY_COLORS: Record<string, string> = {
   alimentacao: 'hsl(var(--chart-1))',
