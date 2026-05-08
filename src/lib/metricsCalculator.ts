@@ -1,3 +1,5 @@
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Transaction, TransactionMetrics } from '@/contexts/TransactionsContext';
 
 /**
@@ -35,10 +37,14 @@ export function calculateMetrics(txs: Transaction[]): TransactionMetrics {
   const monthlyData = Object.entries(monthlyMap)
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-6)
-    .map(([month, data]) => ({
-      month: new Date(month + '-01').toLocaleDateString('pt-BR', { month: 'short' }),
-      ...data,
-    }));
+    .map(([monthKey, data]) => {
+      const [year, month] = monthKey.split('-').map(Number);
+      const localDate = new Date(year, month - 1, 1);
+      return {
+        month: format(localDate, 'MMM/yy', { locale: ptBR }),
+        ...data,
+      };
+    });
 
   return {
     totalBalance: totalIncome - totalExpenses,
