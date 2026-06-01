@@ -136,8 +136,8 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     });
   }, [transactions, filters]);
 
-  const metrics = useMemo(() => calculateMetrics(filteredTransactions, (globalThis as any).__investmentsCache ?? []), [filteredTransactions]);
-  const overallMetrics = useMemo(() => calculateMetrics(transactions, (globalThis as any).__investmentsCache ?? []), [transactions]);
+  const metrics = useMemo(() => calculateMetrics(filteredTransactions), [filteredTransactions]);
+  const overallMetrics = useMemo(() => calculateMetrics(transactions), [transactions]);
 
   const fetchTransactions = useCallback(async (silent = false) => {
     if (authLoading) return;
