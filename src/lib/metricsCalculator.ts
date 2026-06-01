@@ -1,18 +1,24 @@
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Transaction, TransactionMetrics, InvestmentSummary } from '@/contexts/TransactionsContext';
+import { Investment } from '@/types/investment';
 
 /**
- * Calculate financial metrics from a list of transactions.
- * Pure function — no side effects.
+ * Calculate financial metrics from transactions + investment positions.
  *
- * Available balance = income − expenses − investmentDeposits + investmentWithdraws
- * Invested balance  = deposits − withdraws + yields − losses
- * Net worth         = available + invested
- *
- * Investments are NOT included in byCategory / monthlyData (income vs expenses).
+ * Strict rules:
+ * - availableBalance = Σ(income) − Σ(expenses) — ONLY financial_scope === 'operational'
+ * - investedBalance  = Σ(current_balance of investments)
+ *                    + Σ(transaction deltas with financial_scope === 'investment')
+ *                      (deposit + yield positive; withdraw + loss negative)
+ *                    — investment transactions never touch availableBalance.
+ * - netWorth         = availableBalance + investedBalance
+ * - byCategory & monthlyData consider ONLY operational transactions.
  */
-export function calculateMetrics(txs: Transaction[]): TransactionMetrics {
+export function calculateMetrics(
+  txs: Transaction[],
+  investments: Investment[] = []
+): TransactionMetrics {
   let totalIncome = 0;
   let totalExpenses = 0;
   let depositTotal = 0;
@@ -32,29 +38,28 @@ export function calculateMetrics(txs: Transaction[]): TransactionMetrics {
     const amount = Number(tx.amount);
     const monthKey = tx.transaction_date.substring(0, 7);
     const m = ensureMonth(monthKey);
+    const scope = tx.financial_scope ?? (tx.type === 'investment' ? 'investment' : 'operational');
 
-    if (tx.type === 'income') {
+    if (scope === 'operational' && tx.type === 'income') {
       totalIncome += amount;
       byCategory[tx.category] = (byCategory[tx.category] || 0) + amount;
       m.income += amount;
       m.available += amount;
-    } else if (tx.type === 'expense') {
+    } else if (scope === 'operational' && tx.type === 'expense') {
       totalExpenses += amount;
       byCategory[tx.category] = (byCategory[tx.category] || 0) + amount;
       m.expenses += amount;
       m.available -= amount;
-    } else if (tx.type === 'investment') {
+    } else if (scope === 'investment') {
       const invType = tx.investment_type || 'outros';
       const op = tx.investment_operation;
       if (op === 'deposit') {
         depositTotal += amount;
         investmentByType[invType] = (investmentByType[invType] || 0) + amount;
-        m.available -= amount;
         m.invested += amount;
       } else if (op === 'withdraw') {
         withdrawTotal += amount;
         investmentByType[invType] = (investmentByType[invType] || 0) - amount;
-        m.available += amount;
         m.invested -= amount;
       } else if (op === 'yield') {
         yieldTotal += amount;
@@ -68,8 +73,17 @@ export function calculateMetrics(txs: Transaction[]): TransactionMetrics {
     }
   }
 
-  const availableBalance = totalIncome - totalExpenses - depositTotal + withdrawTotal;
-  const investedBalance = depositTotal - withdrawTotal + yieldTotal - lossTotal;
+  // Investment positions (from investments table) — these are point-in-time balances.
+  let positionsTotal = 0;
+  for (const inv of investments) {
+    const balance = Number(inv.current_balance) || 0;
+    positionsTotal += balance;
+    const t = inv.investment_type || 'outros';
+    investmentByType[t] = (investmentByType[t] || 0) + balance;
+  }
+
+  const availableBalance = totalIncome - totalExpenses;
+  const investedBalance = positionsTotal + depositTotal - withdrawTotal + yieldTotal - lossTotal;
   const netWorth = availableBalance + investedBalance;
 
   const sortedMonths = Object.entries(monthlyMap).sort(([a], [b]) => a.localeCompare(b));
@@ -87,19 +101,22 @@ export function calculateMetrics(txs: Transaction[]): TransactionMetrics {
       };
     });
 
-  // Cumulative monthly net worth
+  // Cumulative monthly net worth — uses ONLY transaction-driven deltas.
+  // Positions (current_balance) are added as a fixed offset on the latest month.
   let cumAvail = 0;
   let cumInv = 0;
-  const monthlyNetWorth = sortedMonths.slice(-6).map(([monthKey, d]) => {
+  const trail = sortedMonths.slice(-6);
+  const monthlyNetWorth = trail.map(([monthKey, d], i) => {
     cumAvail += d.available;
     cumInv += d.invested;
+    const baseInv = i === trail.length - 1 ? cumInv + positionsTotal : cumInv;
     const [year, month] = monthKey.split('-').map(Number);
     const localDate = new Date(year, month - 1, 1);
     return {
       month: format(localDate, 'MMM/yy', { locale: ptBR }),
       available: cumAvail,
-      invested: cumInv,
-      total: cumAvail + cumInv,
+      invested: baseInv,
+      total: cumAvail + baseInv,
     };
   });
 

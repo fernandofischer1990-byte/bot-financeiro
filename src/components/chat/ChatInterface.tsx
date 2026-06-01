@@ -8,6 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
+import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe } from 'lucide-react';
 import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INVESTMENT_TYPES, INVESTMENT_OPERATIONS, getInvestmentTypeLabel, getInvestmentOperationLabel } from '@/lib/constants';
@@ -68,7 +69,8 @@ function cleanContentForDisplay(content: string): string {
 
 export function ChatInterface() {
   const { user } = useAuth();
-  const { overallMetrics: metrics, transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
+  const { transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
+  const { overallMetrics: metrics } = useFinancialMetrics();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');

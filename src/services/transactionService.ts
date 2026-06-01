@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { Transaction, TransactionInput, InvestmentOperation } from '@/contexts/TransactionsContext';
+import { Transaction, TransactionInput, InvestmentOperation, FinancialScope } from '@/contexts/TransactionsContext';
 import { getLocalISODate } from '@/lib/dateUtils';
 
 function castTransaction(tx: Record<string, unknown>): Transaction {
@@ -7,6 +7,8 @@ function castTransaction(tx: Record<string, unknown>): Transaction {
     ...tx,
     type: tx.type as 'income' | 'expense' | 'investment',
     source: tx.source as 'manual' | 'chat' | 'upload',
+    financial_scope: ((tx.financial_scope as FinancialScope | undefined) ??
+      (tx.type === 'investment' ? 'investment' : 'operational')),
     investment_operation: (tx.investment_operation as InvestmentOperation | null | undefined) ?? null,
     investment_type: (tx.investment_type as string | null | undefined) ?? null,
     institution: (tx.institution as string | null | undefined) ?? null,
@@ -21,7 +23,7 @@ export async function fetchUserTransactions(userId: string): Promise<{ data: Tra
   try {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,investment_operation,investment_type,institution')
+      .select("id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,financial_scope,investment_operation,investment_type,institution")
       .eq('user_id', userId)
       .order('transaction_date', { ascending: false })
       .limit(1000);

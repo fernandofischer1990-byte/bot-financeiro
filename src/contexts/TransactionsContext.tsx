@@ -15,6 +15,7 @@ import {
 
 export type TransactionType = 'income' | 'expense' | 'investment';
 export type InvestmentOperation = 'deposit' | 'withdraw' | 'yield' | 'loss';
+export type FinancialScope = 'operational' | 'investment';
 
 export interface Transaction {
   id: string;
@@ -27,6 +28,7 @@ export interface Transaction {
   source: 'manual' | 'chat' | 'upload';
   created_at: string;
   updated_at: string;
+  financial_scope: FinancialScope;
   investment_operation?: InvestmentOperation | null;
   investment_type?: string | null;
   institution?: string | null;
@@ -39,6 +41,7 @@ export interface TransactionInput {
   description?: string;
   transaction_date?: string;
   source?: 'manual' | 'chat' | 'upload';
+  financial_scope?: FinancialScope;
   investment_operation?: InvestmentOperation;
   investment_type?: string;
   institution?: string;

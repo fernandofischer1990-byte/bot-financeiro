@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
+import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ChatInterface } from '@/components/chat/ChatInterface';
@@ -31,7 +32,6 @@ export default function Index() {
 function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
   const { 
     filteredTransactions,
-    metrics, 
     initialLoading,
     hasLoadedOnce,
     loadError,
@@ -41,6 +41,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
     updateTransaction,
     refetch,
   } = useTransactionsContext();
+  const { metrics } = useFinancialMetrics();
 
   return (
     <div className="min-h-screen bg-background">

@@ -131,6 +131,69 @@ export type Database = {
         }
         Relationships: []
       }
+      investments: {
+        Row: {
+          created_at: string
+          current_balance: number
+          end_date: string | null
+          id: string
+          imported_at: string | null
+          imported_from: string
+          initial_amount: number
+          institution: string | null
+          investment_name: string
+          investment_type: string
+          metadata: Json
+          source_file_name: string | null
+          start_date: string | null
+          term_days: number | null
+          term_months: number | null
+          term_years: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_balance?: number
+          end_date?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_from?: string
+          initial_amount?: number
+          institution?: string | null
+          investment_name: string
+          investment_type?: string
+          metadata?: Json
+          source_file_name?: string | null
+          start_date?: string | null
+          term_days?: number | null
+          term_months?: number | null
+          term_years?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_balance?: number
+          end_date?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_from?: string
+          initial_amount?: number
+          institution?: string | null
+          investment_name?: string
+          investment_type?: string
+          metadata?: Json
+          source_file_name?: string | null
+          start_date?: string | null
+          term_days?: number | null
+          term_months?: number | null
+          term_years?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mapping_templates: {
         Row: {
           created_at: string
@@ -185,6 +248,7 @@ export type Database = {
           category: string
           created_at: string
           description: string | null
+          financial_scope: string
           id: string
           institution: string | null
           investment_operation: string | null
@@ -200,6 +264,7 @@ export type Database = {
           category: string
           created_at?: string
           description?: string | null
+          financial_scope?: string
           id?: string
           institution?: string | null
           investment_operation?: string | null
@@ -215,6 +280,7 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string | null
+          financial_scope?: string
           id?: string
           institution?: string | null
           investment_operation?: string | null
