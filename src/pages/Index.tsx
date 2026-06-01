@@ -32,7 +32,6 @@ export default function Index() {
 function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
   const { 
     filteredTransactions,
-    metrics, 
     initialLoading,
     hasLoadedOnce,
     loadError,
@@ -42,6 +41,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
     updateTransaction,
     refetch,
   } = useTransactionsContext();
+  const { metrics } = useFinancialMetrics();
 
   return (
     <div className="min-h-screen bg-background">
