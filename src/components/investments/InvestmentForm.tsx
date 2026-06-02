@@ -76,15 +76,9 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
               <Input id="inst" value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="Ex: XP, Nubank" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="initial">Valor aplicado</Label>
-              <Input id="initial" type="text" inputMode="decimal" value={initialAmount} onChange={(e) => setInitialAmount(e.target.value)} placeholder="0,00" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bal">Saldo atual *</Label>
-              <Input id="bal" type="text" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0,00" required />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="initial">Valor aplicado *</Label>
+            <Input id="initial" type="text" inputMode="decimal" value={initialAmount} onChange={(e) => setInitialAmount(e.target.value)} placeholder="0,00" required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
