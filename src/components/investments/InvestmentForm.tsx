@@ -20,7 +20,6 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
   const [type, setType] = useState(initial?.investment_type ?? 'outros');
   const [institution, setInstitution] = useState(initial?.institution ?? '');
   const [initialAmount, setInitialAmount] = useState(String(initial?.initial_amount ?? ''));
-  const [balance, setBalance] = useState(String(initial?.current_balance ?? ''));
   const [startDate, setStartDate] = useState(initial?.start_date ?? '');
   const [endDate, setEndDate] = useState(initial?.end_date ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -32,14 +31,15 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !balance) return;
+    if (!name.trim() || !initialAmount) return;
     setSubmitting(true);
+    const amount = parseNum(initialAmount);
     const payload = {
       investment_name: name.trim(),
       investment_type: type,
       institution: institution.trim() || null,
-      initial_amount: parseNum(initialAmount || balance),
-      current_balance: parseNum(balance),
+      initial_amount: amount,
+      current_balance: amount,
       start_date: startDate || null,
       end_date: endDate || null,
     };
