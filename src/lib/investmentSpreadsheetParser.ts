@@ -148,8 +148,7 @@ export function parseInvestmentSheet(rows: Record<string, unknown>[], fileName: 
         case 'investment_type':
           (mapped as any)[field] = String(value).trim();
           break;
-        case 'initial_amount':
-        case 'current_balance': {
+        case 'initial_amount': {
           const n = parseAmount(value);
           if (n !== null) (mapped as any)[field] = n;
           break;
