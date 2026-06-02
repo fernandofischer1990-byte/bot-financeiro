@@ -213,6 +213,6 @@ export async function parseInvestmentSpreadsheet(file: File): Promise<{
   }
   const data = utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[chosenSheet], { defval: null });
   const parsed = parseInvestmentSheet(data, file.name)
-    .filter(r => r.input.investment_name && (r.input.current_balance > 0 || r.input.initial_amount > 0));
+    .filter(r => r.input.investment_name && r.input.initial_amount > 0);
   return { rows: parsed, sheetName: chosenSheet, totalRows: data.length };
 }
