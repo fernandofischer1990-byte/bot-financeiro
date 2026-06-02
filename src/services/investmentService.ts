@@ -5,7 +5,6 @@ function castInvestment(row: Record<string, unknown>): Investment {
   return {
     ...row,
     initial_amount: Number(row.initial_amount ?? 0),
-    current_balance: Number(row.current_balance ?? 0),
     metadata: (row.metadata as Record<string, unknown>) ?? {},
   } as Investment;
 }
@@ -16,7 +15,7 @@ export async function fetchUserInvestments(userId: string): Promise<{ data: Inve
     .from('investments')
     .select('*')
     .eq('user_id', userId)
-    .order('current_balance', { ascending: false })
+    .order('initial_amount', { ascending: false })
     .limit(1000);
   if (error) return { data: null, error: error.message };
   return { data: (data || []).map(r => castInvestment(r as Record<string, unknown>)), error: null };
@@ -30,8 +29,7 @@ export async function insertInvestment(userId: string, input: InvestmentInput): 
       investment_name: input.investment_name,
       investment_type: input.investment_type ?? 'outros',
       institution: input.institution ?? null,
-      initial_amount: input.initial_amount ?? input.current_balance,
-      current_balance: input.current_balance,
+      initial_amount: input.initial_amount,
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       term_days: input.term_days ?? null,
@@ -55,8 +53,7 @@ export async function insertMultipleInvestments(userId: string, inputs: Investme
     investment_name: input.investment_name,
     investment_type: input.investment_type ?? 'outros',
     institution: input.institution ?? null,
-    initial_amount: input.initial_amount ?? input.current_balance,
-    current_balance: input.current_balance,
+    initial_amount: input.initial_amount,
     start_date: input.start_date ?? null,
     end_date: input.end_date ?? null,
     term_days: input.term_days ?? null,
