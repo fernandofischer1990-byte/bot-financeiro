@@ -20,7 +20,6 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
   const [type, setType] = useState(initial?.investment_type ?? 'outros');
   const [institution, setInstitution] = useState(initial?.institution ?? '');
   const [initialAmount, setInitialAmount] = useState(String(initial?.initial_amount ?? ''));
-  const [balance, setBalance] = useState(String(initial?.current_balance ?? ''));
   const [startDate, setStartDate] = useState(initial?.start_date ?? '');
   const [endDate, setEndDate] = useState(initial?.end_date ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -32,14 +31,15 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !balance) return;
+    if (!name.trim() || !initialAmount) return;
     setSubmitting(true);
+    const amount = parseNum(initialAmount);
     const payload = {
       investment_name: name.trim(),
       investment_type: type,
       institution: institution.trim() || null,
-      initial_amount: parseNum(initialAmount || balance),
-      current_balance: parseNum(balance),
+      initial_amount: amount,
+      current_balance: amount,
       start_date: startDate || null,
       end_date: endDate || null,
     };
@@ -76,15 +76,9 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
               <Input id="inst" value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="Ex: XP, Nubank" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="initial">Valor aplicado</Label>
-              <Input id="initial" type="text" inputMode="decimal" value={initialAmount} onChange={(e) => setInitialAmount(e.target.value)} placeholder="0,00" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bal">Saldo atual *</Label>
-              <Input id="bal" type="text" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0,00" required />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="initial">Valor aplicado *</Label>
+            <Input id="initial" type="text" inputMode="decimal" value={initialAmount} onChange={(e) => setInitialAmount(e.target.value)} placeholder="0,00" required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
