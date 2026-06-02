@@ -41,7 +41,7 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
   const totals = useMemo(() => {
     let invested = 0, initial = 0;
     for (const inv of investments) {
-      invested += Number(inv.current_balance) || 0;
+      invested += Number(inv.initial_amount) || 0;
       initial += Number(inv.initial_amount) || 0;
     }
     return { invested, initial, profit: invested - initial };

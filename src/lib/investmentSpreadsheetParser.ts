@@ -32,10 +32,10 @@ const HEADER_MAP: Record<string, keyof InvestmentInput> = {
   valor_inicial: 'initial_amount',
   aporte: 'initial_amount',
   valor_aplicado: 'initial_amount',
-  saldo: 'current_balance',
-  saldo_atual: 'current_balance',
-  valor_atual: 'current_balance',
-  posicao: 'current_balance',
+  saldo: 'initial_amount',
+  saldo_atual: 'initial_amount',
+  valor_atual: 'initial_amount',
+  posicao: 'initial_amount',
   inicio: 'start_date',
   data_inicio: 'start_date',
   data_aplicacao: 'start_date',
@@ -148,8 +148,7 @@ export function parseInvestmentSheet(rows: Record<string, unknown>[], fileName: 
         case 'investment_type':
           (mapped as any)[field] = String(value).trim();
           break;
-        case 'initial_amount':
-        case 'current_balance': {
+        case 'initial_amount': {
           const n = parseAmount(value);
           if (n !== null) (mapped as any)[field] = n;
           break;
@@ -178,8 +177,7 @@ export function parseInvestmentSheet(rows: Record<string, unknown>[], fileName: 
       investment_name: name,
       investment_type: investmentType,
       institution: mapped.institution ?? null,
-      initial_amount: mapped.initial_amount ?? mapped.current_balance ?? 0,
-      current_balance: mapped.current_balance ?? mapped.initial_amount ?? 0,
+      initial_amount: mapped.initial_amount ?? 0,
       start_date: mapped.start_date ?? null,
       end_date: mapped.end_date ?? null,
       term_days: mapped.term_days ?? null,
@@ -215,6 +213,6 @@ export async function parseInvestmentSpreadsheet(file: File): Promise<{
   }
   const data = utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[chosenSheet], { defval: null });
   const parsed = parseInvestmentSheet(data, file.name)
-    .filter(r => r.input.investment_name && (r.input.current_balance > 0 || r.input.initial_amount > 0));
+    .filter(r => r.input.investment_name && r.input.initial_amount > 0);
   return { rows: parsed, sheetName: chosenSheet, totalRows: data.length };
 }

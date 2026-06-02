@@ -19,7 +19,6 @@ export interface Investment {
   investment_type: string;
   institution: string | null;
   initial_amount: number;
-  current_balance: number;
   start_date: string | null;
   end_date: string | null;
   term_days: number | null;
@@ -37,8 +36,7 @@ export interface InvestmentInput {
   investment_name: string;
   investment_type?: string;
   institution?: string | null;
-  initial_amount?: number;
-  current_balance: number;
+  initial_amount: number;
   start_date?: string | null;
   end_date?: string | null;
   term_days?: number | null;

@@ -76,7 +76,7 @@ export function calculateMetrics(
   // Investment positions (from investments table) — these are point-in-time balances.
   let positionsTotal = 0;
   for (const inv of investments) {
-    const balance = Number(inv.current_balance) || 0;
+    const balance = Number(inv.initial_amount) || 0;
     positionsTotal += balance;
     const t = inv.investment_type || 'outros';
     investmentByType[t] = (investmentByType[t] || 0) + balance;
