@@ -118,8 +118,7 @@ export function InvestmentImportWizard({ open, onOpenChange }: Props) {
                     <TableHead>Investimento</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Instituição</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                    <TableHead className="text-right">Saldo</TableHead>
+                    <TableHead className="text-right">Valor aplicado</TableHead>
                     <TableHead>Início</TableHead>
                     <TableHead>Fim</TableHead>
                   </TableRow>
@@ -130,8 +129,7 @@ export function InvestmentImportWizard({ open, onOpenChange }: Props) {
                       <TableCell className="font-medium max-w-[260px] truncate" title={r.input.investment_name}>{r.input.investment_name}</TableCell>
                       <TableCell><Badge variant="outline">{getInvestmentTypeLabel(r.input.investment_type)}</Badge></TableCell>
                       <TableCell>{r.input.institution || '—'}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(r.input.initial_amount || 0)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(r.input.current_balance)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(r.input.initial_amount || 0)}</TableCell>
                       <TableCell className="text-xs">{r.input.start_date || '—'}</TableCell>
                       <TableCell className="text-xs">{r.input.end_date || '—'}</TableCell>
                     </TableRow>
