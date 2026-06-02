@@ -56,16 +56,13 @@ export function InvestmentsTable() {
               <TableHead>Investimento</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Instituição</TableHead>
-              <TableHead className="text-right">Aplicado</TableHead>
-              <TableHead className="text-right">Saldo Atual</TableHead>
-              <TableHead className="text-right">Rentab.</TableHead>
+              <TableHead className="text-right">Valor aplicado</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead className="w-[100px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.map(inv => {
-              const profit = Number(inv.current_balance) - Number(inv.initial_amount);
               return (
                 <TableRow key={inv.id}>
                   <TableCell className="font-medium max-w-[280px] truncate" title={inv.investment_name}>
@@ -74,11 +71,7 @@ export function InvestmentsTable() {
                   </TableCell>
                   <TableCell><Badge variant="outline" className="text-xs">{getInvestmentTypeLabel(inv.investment_type)}</Badge></TableCell>
                   <TableCell className="text-sm">{inv.institution || '—'}</TableCell>
-                  <TableCell className="text-right text-sm">{formatCurrency(Number(inv.initial_amount))}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(Number(inv.current_balance))}</TableCell>
-                  <TableCell className={`text-right text-sm ${profit >= 0 ? 'text-success' : 'text-destructive'}`}>
-                    {profit >= 0 ? '+' : ''}{formatCurrency(profit)}
-                  </TableCell>
+                  <TableCell className="text-right font-semibold">{formatCurrency(Number(inv.initial_amount))}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{inv.end_date || '—'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
