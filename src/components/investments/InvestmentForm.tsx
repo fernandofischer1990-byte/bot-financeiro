@@ -39,7 +39,6 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
       investment_type: type,
       institution: institution.trim() || null,
       initial_amount: amount,
-      current_balance: amount,
       start_date: startDate || null,
       end_date: endDate || null,
     };
