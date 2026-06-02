@@ -28,7 +28,7 @@ export function InvestmentGroupChart({ groupBy, title, labelFn }: Props) {
     const map: Record<string, number> = {};
     for (const inv of investments) {
       const key = (inv[groupBy] as string) || 'Sem categoria';
-      map[key] = (map[key] || 0) + Number(inv.current_balance);
+      map[key] = (map[key] || 0) + Number(inv.initial_amount);
     }
     return Object.entries(map)
       .filter(([, v]) => v > 0)
