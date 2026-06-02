@@ -1,0 +1,1 @@
+ALTER TABLE public.investments DROP COLUMN IF EXISTS current_balance;

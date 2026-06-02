@@ -134,7 +134,6 @@ export type Database = {
       investments: {
         Row: {
           created_at: string
-          current_balance: number
           end_date: string | null
           id: string
           imported_at: string | null
@@ -154,7 +153,6 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          current_balance?: number
           end_date?: string | null
           id?: string
           imported_at?: string | null
@@ -174,7 +172,6 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          current_balance?: number
           end_date?: string | null
           id?: string
           imported_at?: string | null
