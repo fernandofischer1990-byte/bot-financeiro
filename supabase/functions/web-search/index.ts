@@ -15,19 +15,34 @@ const nowStamp = () =>
 // ----- External data providers -----
 
 async function fetchFx(pair: string): Promise<string | null> {
-  // pair like USD-BRL, EUR-BRL, GBP-BRL
+  // pair like USD-BRL, EUR-BRL, GBP-BRL — try AwesomeAPI, fall back to exchangerate.host
   try {
     const r = await fetch(`https://economia.awesomeapi.com.br/json/last/${pair}`);
+    if (r.ok) {
+      const j = await r.json();
+      const key = pair.replace("-", "");
+      const d = j?.[key];
+      if (d) {
+        const bid = Number(d.bid);
+        const pct = Number(d.pctChange);
+        const name = d.name || pair;
+        return `**${name}**\nCotação atual: ${fmtBRL(bid)}\nVariação no dia: ${pct >= 0 ? "+" : ""}${fmtPct(pct)}\nFonte: AwesomeAPI (média de mercado) — consultado em ${nowStamp()}.`;
+      }
+    }
+  } catch (e) {
+    console.log("[web-search] AwesomeAPI failed:", e);
+  }
+  // Fallback: exchangerate.host
+  try {
+    const [from, to] = pair.split("-");
+    const r = await fetch(`https://api.exchangerate.host/latest?base=${from}&symbols=${to}`);
     if (!r.ok) return null;
     const j = await r.json();
-    const key = pair.replace("-", "");
-    const d = j?.[key];
-    if (!d) return null;
-    const bid = Number(d.bid);
-    const pct = Number(d.pctChange);
-    const name = d.name || pair;
-    return `**${name}**\nCotação atual: ${fmtBRL(bid)}\nVariação no dia: ${pct >= 0 ? "+" : ""}${fmtPct(pct)}\nFonte: AwesomeAPI (média de mercado) — consultado em ${nowStamp()}.`;
-  } catch {
+    const rate = Number(j?.rates?.[to]);
+    if (!rate) return null;
+    return `**${from}/${to}**\nCotação atual: ${fmtBRL(rate)}\nReferência: ${j?.date || "hoje"}\nFonte: exchangerate.host — consultado em ${nowStamp()}.`;
+  } catch (e) {
+    console.log("[web-search] exchangerate.host failed:", e);
     return null;
   }
 }
@@ -69,6 +84,23 @@ async function fetchCrypto(ids: string[], names: Record<string, string>): Promis
   }
 }
 
+async function fetchStocks(tickers: string[]): Promise<string | null> {
+  try {
+    const r = await fetch(`https://brapi.dev/api/quote/${tickers.join(",")}`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const results = Array.isArray(j?.results) ? j.results : [];
+    if (!results.length) return null;
+    const lines = results.map((s: any) =>
+      `**${s.symbol}**${s.longName ? ` — ${s.longName}` : ""}\nPreço: ${fmtBRL(Number(s.regularMarketPrice))}\nVariação no dia: ${(s.regularMarketChangePercent ?? 0).toFixed(2)}%`,
+    );
+    return `${lines.join("\n\n")}\n\nFonte: brapi.dev (B3) — consultado em ${nowStamp()}.`;
+  } catch (e) {
+    console.log("[web-search] brapi.dev failed:", e);
+    return null;
+  }
+}
+
 // ----- Routing -----
 
 async function routeQuery(query: string): Promise<string | null> {
@@ -85,7 +117,7 @@ async function routeQuery(query: string): Promise<string | null> {
   const cryptoNames: Record<string, string> = {};
   if (/\b(bitcoin|btc)\b/.test(q)) { cryptoIds.push("bitcoin"); cryptoNames.bitcoin = "Bitcoin (BTC)"; }
   if (/\b(ethereum|eth)\b/.test(q)) { cryptoIds.push("ethereum"); cryptoNames.ethereum = "Ethereum (ETH)"; }
-  if (/\bsolana|sol\b/.test(q)) { cryptoIds.push("solana"); cryptoNames.solana = "Solana (SOL)"; }
+  if (/\b(solana|sol)\b/.test(q)) { cryptoIds.push("solana"); cryptoNames.solana = "Solana (SOL)"; }
   const cryptoBlock = cryptoIds.length ? await fetchCrypto(cryptoIds, cryptoNames) : null;
 
   // BCB economic indicators
@@ -94,9 +126,15 @@ async function routeQuery(query: string): Promise<string | null> {
   if (/\bcdi\b/.test(q)) bcbParts.push(await fetchBcbSerie(12, "Taxa CDI", "% a.d.") || "");
   if (/\b(ipca|infla[cç][ãa]o)\b/.test(q)) bcbParts.push(await fetchBcbSerie(433, "IPCA (variação mensal)", "%") || "");
 
-  const blocks = [...fxParts, ...bcbParts, cryptoBlock].filter(Boolean) as string[];
+  // Brazilian stocks / ETFs / FIIs — match B3 tickers like PETR4, VALE3, ITSA4, BOVA11, HGLG11
+  const tickerMatches = Array.from(query.toUpperCase().matchAll(/\b([A-Z]{4}[0-9]{1,2})\b/g)).map(m => m[1]);
+  const uniqueTickers = Array.from(new Set(tickerMatches));
+  const stockBlock = uniqueTickers.length ? await fetchStocks(uniqueTickers) : null;
+
+  const blocks = [...fxParts, ...bcbParts, cryptoBlock, stockBlock].filter(Boolean) as string[];
   return blocks.length ? blocks.join("\n\n---\n\n") : null;
 }
+
 
 // ----- Fallback via LLM (no knowledge-cutoff claims) -----
 
