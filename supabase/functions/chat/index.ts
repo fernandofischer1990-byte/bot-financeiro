@@ -77,8 +77,19 @@ Mapeamento de palavras → investment_operation:
 ### 3. Deletar múltiplas
 { "type": "delete_all_transactions", "payload": { "filter": "all" | "income" | "expense" } }
 
-### 4. Buscar na internet
+### 4. Buscar na internet (dados ao vivo)
 { "type": "web_search", "payload": { "query": "string" } }
+
+OBRIGATÓRIO usar web_search SEMPRE que o usuário pedir:
+- Cotações ao vivo (dólar, euro, libra, bitcoin, ethereum, ações, FII)
+- Indicadores econômicos atuais (SELIC, CDI, IPCA, inflação)
+- Notícias recentes / fatos do dia
+- Qualquer informação dependente de "hoje", "agora", "atual", "este mês"
+
+⚠️ NUNCA invente cotações, taxas, preços, percentuais ou notícias.
+⚠️ NUNCA diga "minha base de dados acompanha o mercado até 2024", "meu conhecimento vai até [ano]", "knowledge cutoff", ou cite anos do seu treinamento. A data real é fornecida abaixo no contexto — use-a.
+⚠️ Se a pergunta exigir dado externo ao vivo, a "message" deve ser curta ("Buscando informações atualizadas...") e você DEVE emitir uma action web_search. O resultado real virá da busca, não da sua memória.
+
 
 ## 🧠 REGRAS DE INTERPRETAÇÃO
 
