@@ -120,7 +120,6 @@ async function fetchStocks(tickers: string[]): Promise<string | null> {
 
 async function routeQuery(query: string): Promise<string | null> {
   const q = query.toLowerCase();
-  console.log("[web-search] routeQuery v2 entry, q:", q);
 
   // FX
   const fxParts: string[] = [];
