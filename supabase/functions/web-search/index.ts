@@ -115,11 +115,8 @@ async function fetchStocks(tickers: string[]): Promise<string | null> {
   }
 }
 
-    return null;
-  }
-}
-
 // ----- Routing -----
+
 
 async function routeQuery(query: string): Promise<string | null> {
   const q = query.toLowerCase();
