@@ -15,9 +15,10 @@ const nowStamp = () =>
 // ----- External data providers -----
 
 async function fetchFx(pair: string): Promise<string | null> {
-  // pair like USD-BRL, EUR-BRL, GBP-BRL — try AwesomeAPI, fall back to exchangerate.host
+  // Try AwesomeAPI first (intraday); on failure use BCB SGS (D-1 close, always reliable)
   try {
     const r = await fetch(`https://economia.awesomeapi.com.br/json/last/${pair}`);
+    console.log(`[web-search] AwesomeAPI ${pair} status:`, r.status);
     if (r.ok) {
       const j = await r.json();
       const key = pair.replace("-", "");
@@ -30,19 +31,26 @@ async function fetchFx(pair: string): Promise<string | null> {
       }
     }
   } catch (e) {
-    console.log("[web-search] AwesomeAPI failed:", e);
+    console.log("[web-search] AwesomeAPI threw:", e);
   }
-  // Fallback: exchangerate.host
+  // BCB SGS fallback (closing rates): USD=1, EUR=21619, GBP=21623
+  const sgsMap: Record<string, { code: number; label: string }> = {
+    "USD-BRL": { code: 1, label: "Dólar Comercial (USD/BRL)" },
+    "EUR-BRL": { code: 21619, label: "Euro (EUR/BRL)" },
+    "GBP-BRL": { code: 21623, label: "Libra (GBP/BRL)" },
+  };
+  const sgs = sgsMap[pair];
+  if (!sgs) return null;
   try {
-    const [from, to] = pair.split("-");
-    const r = await fetch(`https://api.exchangerate.host/latest?base=${from}&symbols=${to}`);
+    const r = await fetch(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${sgs.code}/dados/ultimos/1?formato=json`);
+    console.log(`[web-search] BCB SGS ${sgs.code} status:`, r.status);
     if (!r.ok) return null;
     const j = await r.json();
-    const rate = Number(j?.rates?.[to]);
-    if (!rate) return null;
-    return `**${from}/${to}**\nCotação atual: ${fmtBRL(rate)}\nReferência: ${j?.date || "hoje"}\nFonte: exchangerate.host — consultado em ${nowStamp()}.`;
+    const last = Array.isArray(j) ? j[j.length - 1] : null;
+    if (!last) return null;
+    return `**${sgs.label}**\nCotação: ${fmtBRL(Number(last.valor))}\nReferência: ${last.data} (fechamento)\nFonte: Banco Central do Brasil (PTAX) — consultado em ${nowStamp()}.`;
   } catch (e) {
-    console.log("[web-search] exchangerate.host failed:", e);
+    console.log("[web-search] BCB FX threw:", e);
     return null;
   }
 }
@@ -85,9 +93,15 @@ async function fetchCrypto(ids: string[], names: Record<string, string>): Promis
 }
 
 async function fetchStocks(tickers: string[]): Promise<string | null> {
+  const url = `https://brapi.dev/api/quote/${tickers.join(",")}`;
   try {
-    const r = await fetch(`https://brapi.dev/api/quote/${tickers.join(",")}`);
-    if (!r.ok) return null;
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 FinBot" } });
+    console.log(`[web-search] brapi status:`, r.status);
+    if (!r.ok) {
+      const txt = await r.text();
+      console.log("[web-search] brapi body:", txt.slice(0, 200));
+      return null;
+    }
     const j = await r.json();
     const results = Array.isArray(j?.results) ? j.results : [];
     if (!results.length) return null;
@@ -96,7 +110,11 @@ async function fetchStocks(tickers: string[]): Promise<string | null> {
     );
     return `${lines.join("\n\n")}\n\nFonte: brapi.dev (B3) — consultado em ${nowStamp()}.`;
   } catch (e) {
-    console.log("[web-search] brapi.dev failed:", e);
+    console.log("[web-search] brapi threw:", e);
+    return null;
+  }
+}
+
     return null;
   }
 }
