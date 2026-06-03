@@ -23,7 +23,7 @@ export function MetricCard({ title, value, icon: Icon, variant = 'default', clas
               variant === 'income' && 'text-success',
               variant === 'expense' && 'text-destructive',
               variant === 'investment' && 'text-primary',
-              variant === 'networth' && 'text-accent-foreground',
+              variant === 'networth' && 'text-accent',
             )}>
               {formatCurrency(value)}
             </p>
