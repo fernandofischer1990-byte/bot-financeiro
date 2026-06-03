@@ -34,7 +34,7 @@ export function MetricCard({ title, value, icon: Icon, variant = 'default', clas
             variant === 'income' && 'bg-success/10 text-success',
             variant === 'expense' && 'bg-destructive/10 text-destructive',
             variant === 'investment' && 'bg-primary/10 text-primary',
-            variant === 'networth' && 'bg-accent/30 text-accent-foreground',
+            variant === 'networth' && 'bg-accent/10 text-accent',
           )}>
             <Icon className="h-5 w-5" />
           </div>
