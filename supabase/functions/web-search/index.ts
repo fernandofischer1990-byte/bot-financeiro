@@ -39,7 +39,7 @@ const CURRENCIES: CurrencyDefinition[] = [
   { code: "BOB", name: "Boliviano", aliases: ["bob", "boliviano", "bolivianos"] },
   // Europe
   { code: "EUR", name: "Euro", aliases: ["eur", "euro", "euros"] },
-  { code: "GBP", name: "Libra Esterlina", aliases: ["gbp", "libra esterlina", "libras esterlinas", "esterlina"] },
+  { code: "GBP", name: "Libra Esterlina", aliases: ["gbp", "libra", "libras", "libra esterlina", "libras esterlinas", "esterlina"] },
   { code: "CHF", name: "Franco Suíço", aliases: ["chf", "franco suico", "francos suicos", "franco"] },
   { code: "NOK", name: "Coroa Norueguesa", aliases: ["nok", "coroa norueguesa", "coroas norueguesas"] },
   { code: "SEK", name: "Coroa Sueca", aliases: ["sek", "coroa sueca", "coroas suecas"] },
