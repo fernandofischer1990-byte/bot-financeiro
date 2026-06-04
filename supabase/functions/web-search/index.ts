@@ -26,52 +26,68 @@ interface CurrencyDefinition {
 const CURRENCIES: CurrencyDefinition[] = [
   // Americas
   { code: "BRL", name: "Real Brasileiro", aliases: ["brl", "real", "reais", "real brasileiro"] },
-  { code: "USD", name: "Dólar Americano", aliases: ["usd", "dolar", "dólar", "dolares", "dólares", "dolar americano", "dólar americano", "us dollar"] },
-  { code: "CAD", name: "Dólar Canadense", aliases: ["cad", "dolar canadense", "dólar canadense", "dolar canadiano"] },
+  // For Dolar/Libra/Peso/etc., bare terms live in AMBIGUOUS_BARE (force disambiguation).
+  { code: "USD", name: "Dólar Americano", aliases: ["usd", "dolar americano", "dolares americanos", "us dollar", "dolar dos eua"] },
+  { code: "CAD", name: "Dólar Canadense", aliases: ["cad", "dolar canadense", "dolar canadiano"] },
   { code: "MXN", name: "Peso Mexicano", aliases: ["mxn", "peso mexicano", "pesos mexicanos"] },
   { code: "ARS", name: "Peso Argentino", aliases: ["ars", "peso argentino", "pesos argentinos"] },
   { code: "CLP", name: "Peso Chileno", aliases: ["clp", "peso chileno", "pesos chilenos"] },
   { code: "COP", name: "Peso Colombiano", aliases: ["cop", "peso colombiano", "pesos colombianos"] },
-  { code: "PEN", name: "Sol Peruano", aliases: ["pen", "sol", "sol peruano", "soles", "novo sol"] },
+  { code: "PEN", name: "Sol Peruano", aliases: ["pen", "sol peruano", "soles peruanos", "novo sol"] },
   { code: "UYU", name: "Peso Uruguaio", aliases: ["uyu", "peso uruguaio", "pesos uruguaios"] },
   { code: "PYG", name: "Guarani Paraguaio", aliases: ["pyg", "guarani", "guarani paraguaio"] },
   { code: "BOB", name: "Boliviano", aliases: ["bob", "boliviano", "bolivianos"] },
   // Europe
   { code: "EUR", name: "Euro", aliases: ["eur", "euro", "euros"] },
-  { code: "GBP", name: "Libra Esterlina", aliases: ["gbp", "libra", "libras", "libra esterlina", "esterlina"] },
-  { code: "CHF", name: "Franco Suíço", aliases: ["chf", "franco", "francos", "franco suico", "franco suíço"] },
-  { code: "NOK", name: "Coroa Norueguesa", aliases: ["nok", "coroa norueguesa"] },
-  { code: "SEK", name: "Coroa Sueca", aliases: ["sek", "coroa sueca"] },
-  { code: "DKK", name: "Coroa Dinamarquesa", aliases: ["dkk", "coroa dinamarquesa"] },
-  { code: "PLN", name: "Zloty Polonês", aliases: ["pln", "zloty", "zloty polones", "zloty polonês"] },
+  { code: "GBP", name: "Libra Esterlina", aliases: ["gbp", "libra esterlina", "libras esterlinas", "esterlina"] },
+  { code: "CHF", name: "Franco Suíço", aliases: ["chf", "franco suico", "francos suicos", "franco"] },
+  { code: "NOK", name: "Coroa Norueguesa", aliases: ["nok", "coroa norueguesa", "coroas norueguesas"] },
+  { code: "SEK", name: "Coroa Sueca", aliases: ["sek", "coroa sueca", "coroas suecas"] },
+  { code: "DKK", name: "Coroa Dinamarquesa", aliases: ["dkk", "coroa dinamarquesa", "coroas dinamarquesas"] },
+  { code: "PLN", name: "Zloty Polonês", aliases: ["pln", "zloty", "zloty polones"] },
   { code: "CZK", name: "Coroa Tcheca", aliases: ["czk", "coroa tcheca", "coroa checa"] },
-  { code: "HUF", name: "Forint Húngaro", aliases: ["huf", "forint", "forint hungaro", "forint húngaro"] },
+  { code: "HUF", name: "Forint Húngaro", aliases: ["huf", "forint", "forint hungaro"] },
   { code: "RON", name: "Leu Romeno", aliases: ["ron", "leu", "leu romeno"] },
   // Asia
-  { code: "JPY", name: "Iene Japonês", aliases: ["jpy", "iene", "ienes", "yen", "iene japones", "iene japonês"] },
-  { code: "CNY", name: "Yuan Chinês", aliases: ["cny", "yuan", "yuan chines", "yuan chinês", "renminbi", "rmb"] },
-  { code: "HKD", name: "Dólar de Hong Kong", aliases: ["hkd", "dolar de hong kong", "dólar de hong kong", "dolar hong kong"] },
-  { code: "SGD", name: "Dólar de Singapura", aliases: ["sgd", "dolar de singapura", "dólar de singapura", "dolar singapura"] },
-  { code: "KRW", name: "Won Sul-Coreano", aliases: ["krw", "won", "won sul coreano", "won sul-coreano"] },
-  { code: "INR", name: "Rúpia Indiana", aliases: ["inr", "rupia", "rúpia", "rupia indiana", "rúpia indiana"] },
-  { code: "THB", name: "Baht Tailandês", aliases: ["thb", "baht", "baht tailandes", "baht tailandês"] },
+  { code: "JPY", name: "Iene Japonês", aliases: ["jpy", "iene", "ienes", "yen", "iene japones"] },
+  { code: "CNY", name: "Yuan Chinês", aliases: ["cny", "yuan", "yuan chines", "renminbi", "rmb"] },
+  { code: "HKD", name: "Dólar de Hong Kong", aliases: ["hkd", "dolar de hong kong", "dolar hong kong"] },
+  { code: "SGD", name: "Dólar de Singapura", aliases: ["sgd", "dolar de singapura", "dolar singapura"] },
+  { code: "KRW", name: "Won Sul-Coreano", aliases: ["krw", "won", "won sul coreano"] },
+  { code: "INR", name: "Rúpia Indiana", aliases: ["inr", "rupia indiana"] },
+  { code: "THB", name: "Baht Tailandês", aliases: ["thb", "baht", "baht tailandes"] },
   { code: "MYR", name: "Ringgit Malaio", aliases: ["myr", "ringgit", "ringgit malaio"] },
-  { code: "IDR", name: "Rupia Indonésia", aliases: ["idr", "rupia indonesia", "rupia indonésia"] },
+  { code: "IDR", name: "Rupia Indonésia", aliases: ["idr", "rupia indonesia"] },
   { code: "PHP", name: "Peso Filipino", aliases: ["php", "peso filipino", "pesos filipinos"] },
   // Middle East
-  { code: "AED", name: "Dirham dos Emirados", aliases: ["aed", "dirham", "dirham dos emirados", "dirham emirados"] },
-  { code: "SAR", name: "Riyal Saudita", aliases: ["sar", "riyal", "rial saudita", "riyal saudita"] },
+  { code: "AED", name: "Dirham dos Emirados", aliases: ["aed", "dirham dos emirados", "dirham emirados"] },
+  { code: "SAR", name: "Riyal Saudita", aliases: ["sar", "rial saudita", "riyal saudita"] },
   { code: "ILS", name: "Novo Shekel Israelense", aliases: ["ils", "shekel", "novo shekel", "shekel israelense"] },
   { code: "QAR", name: "Rial Catariano", aliases: ["qar", "rial catariano", "riyal catariano", "rial qatar"] },
   { code: "KWD", name: "Dinar Kuwaitiano", aliases: ["kwd", "dinar", "dinar kuwaitiano"] },
   // Oceania
-  { code: "AUD", name: "Dólar Australiano", aliases: ["aud", "dolar australiano", "dólar australiano"] },
-  { code: "NZD", name: "Dólar Neozelandês", aliases: ["nzd", "dolar neozelandes", "dólar neozelandês", "dolar da nova zelandia"] },
+  { code: "AUD", name: "Dólar Australiano", aliases: ["aud", "dolar australiano"] },
+  { code: "NZD", name: "Dólar Neozelandês", aliases: ["nzd", "dolar neozelandes", "dolar da nova zelandia"] },
   // Africa
-  { code: "ZAR", name: "Rand Sul-Africano", aliases: ["zar", "rand", "rand sul africano", "rand sul-africano"] },
-  { code: "EGP", name: "Libra Egípcia", aliases: ["egp", "libra egipcia", "libra egípcia"] },
+  { code: "ZAR", name: "Rand Sul-Africano", aliases: ["zar", "rand", "rand sul africano"] },
+  { code: "EGP", name: "Libra Egípcia", aliases: ["egp", "libra egipcia"] },
   { code: "MAD", name: "Dirham Marroquino", aliases: ["mad", "dirham marroquino"] },
 ];
+
+// Bare ambiguous words → if the user types only these (no qualifier), ask which currency.
+// Note: "dolar/libra/peso" sozinhos NÃO devem cair em USD/GBP automaticamente.
+const AMBIGUOUS_BARE: Record<string, string[]> = {
+  "dolar": ["USD", "CAD", "AUD", "NZD", "HKD", "SGD"],
+  "dolares": ["USD", "CAD", "AUD", "NZD", "HKD", "SGD"],
+  "libra": ["GBP", "EGP"],
+  "libras": ["GBP", "EGP"],
+  "peso": ["ARS", "CLP", "COP", "MXN", "UYU", "PHP"],
+  "pesos": ["ARS", "CLP", "COP", "MXN", "UYU", "PHP"],
+  "coroa": ["NOK", "SEK", "DKK", "CZK"],
+  "coroas": ["NOK", "SEK", "DKK", "CZK"],
+  "rupia": ["INR", "IDR"],
+  "sol": ["PEN"], // single — resolves directly
+};
 
 const BY_CODE = new Map(CURRENCIES.map((c) => [c.code, c]));
 
