@@ -77,16 +77,11 @@ const CURRENCIES: CurrencyDefinition[] = [
 // Bare ambiguous words → if the user types only these (no qualifier), ask which currency.
 // Note: "dolar/libra/peso" sozinhos NÃO devem cair em USD/GBP automaticamente.
 const AMBIGUOUS_BARE: Record<string, string[]> = {
-  "dolar": ["USD", "CAD", "AUD", "NZD", "HKD", "SGD"],
-  "dolares": ["USD", "CAD", "AUD", "NZD", "HKD", "SGD"],
-  "libra": ["GBP", "EGP"],
-  "libras": ["GBP", "EGP"],
   "peso": ["ARS", "CLP", "COP", "MXN", "UYU", "PHP"],
   "pesos": ["ARS", "CLP", "COP", "MXN", "UYU", "PHP"],
   "coroa": ["NOK", "SEK", "DKK", "CZK"],
   "coroas": ["NOK", "SEK", "DKK", "CZK"],
   "rupia": ["INR", "IDR"],
-  "sol": ["PEN"], // single — resolves directly
 };
 
 const BY_CODE = new Map(CURRENCIES.map((c) => [c.code, c]));
