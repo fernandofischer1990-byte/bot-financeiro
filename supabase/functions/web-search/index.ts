@@ -117,6 +117,10 @@ interface AliasEntry { alias: string; code: string; }
 const ALIAS_INDEX: AliasEntry[] = (() => {
   const arr: AliasEntry[] = [];
   for (const c of CURRENCIES) for (const a of c.aliases) arr.push({ alias: norm(a), code: c.code });
+  // Inject bare ambiguous tokens so they get matched and surfaced.
+  for (const [bare, codes] of Object.entries(AMBIGUOUS_BARE)) {
+    for (const code of codes) arr.push({ alias: norm(bare), code });
+  }
   arr.sort((a, b) => b.alias.length - a.alias.length);
   return arr;
 })();
