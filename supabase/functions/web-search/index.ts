@@ -26,8 +26,8 @@ interface CurrencyDefinition {
 const CURRENCIES: CurrencyDefinition[] = [
   // Americas
   { code: "BRL", name: "Real Brasileiro", aliases: ["brl", "real", "reais", "real brasileiro"] },
-  // For Dolar/Libra/Peso/etc., bare terms live in AMBIGUOUS_BARE (force disambiguation).
-  { code: "USD", name: "Dólar Americano", aliases: ["usd", "dolar americano", "dolares americanos", "us dollar", "dolar dos eua"] },
+  // For PT-BR users, bare "dolar"/"libra" default to USD/GBP. Variants stay explicit.
+  { code: "USD", name: "Dólar Americano", aliases: ["usd", "dolar", "dolares", "dolar americano", "dolares americanos", "us dollar", "dolar dos eua"] },
   { code: "CAD", name: "Dólar Canadense", aliases: ["cad", "dolar canadense", "dolar canadiano"] },
   { code: "MXN", name: "Peso Mexicano", aliases: ["mxn", "peso mexicano", "pesos mexicanos"] },
   { code: "ARS", name: "Peso Argentino", aliases: ["ars", "peso argentino", "pesos argentinos"] },
