@@ -550,6 +550,23 @@ export function ChatInterface() {
       {/* Input */}
       <div className="p-4 border-t">
         <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
+      {/* Input */}
+      <div className="p-3 lg:p-4 border-t space-y-2">
+        {messages.length > 0 && !isStreaming && (
+          <div className="flex gap-1.5 overflow-x-auto chat-scrollbar pb-1">
+            {INPUT_SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setInput(s)}
+                className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-muted hover:bg-primary/10 hover:text-primary transition-colors border border-transparent hover:border-primary/20"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+        <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
