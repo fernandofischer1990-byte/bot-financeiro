@@ -1,15 +1,21 @@
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
+import { useTheme } from '@/hooks/useTheme';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ChatInterface } from '@/components/chat/ChatInterface';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { ImportWizard } from '@/components/import/ImportWizard';
 import { InvestmentsTab } from '@/components/investments/InvestmentsTab';
+import { ReportsTab } from '@/components/reports/ReportsTab';
+import { OnboardingDialog } from '@/components/onboarding/OnboardingDialog';
+import { AppSidebar, NAV_ITEMS } from '@/components/layout/AppSidebar';
+import { BottomNav } from '@/components/layout/BottomNav';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, LogOut, Wallet, LayoutDashboard, MessageSquare, Plus, Upload, Briefcase } from 'lucide-react';
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { Loader2, LogOut, Moon, Sun } from 'lucide-react';
 
 export default function Index() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -22,104 +28,92 @@ export default function Index() {
     );
   }
 
-  if (!user) {
-    return <AuthPage />;
-  }
-
+  if (!user) return <AuthPage />;
   return <AuthenticatedApp signOut={signOut} />;
 }
 
 function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
-  const { 
+  const {
     filteredTransactions,
     initialLoading,
     hasLoadedOnce,
     loadError,
     filters,
     setFilters,
-    deleteTransaction, 
+    deleteTransaction,
     updateTransaction,
     refetch,
   } = useTransactionsContext();
   const { metrics } = useFinancialMetrics();
+  const { theme, toggle } = useTheme();
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  const activeLabel = NAV_ITEMS.find((i) => i.value === activeTab)?.label ?? 'FinBot';
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-card border-b shadow-sm">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary rounded-lg">
-              <Wallet className="h-5 w-5 text-primary-foreground" />
+    <SidebarProvider>
+      <OnboardingDialog onNavigate={setActiveTab} />
+      <div className="min-h-dvh flex w-full bg-background">
+        <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Header */}
+          <header className="sticky top-0 z-30 h-14 flex items-center justify-between gap-3 px-3 lg:px-6 border-b bg-card/80 backdrop-blur no-print">
+            <div className="flex items-center gap-2 min-w-0">
+              <SidebarTrigger className="hidden lg:flex" />
+              <h1 className="font-semibold text-base lg:text-lg truncate">{activeLabel}</h1>
             </div>
-            <span className="font-bold text-xl">FinBot</span>
-          </div>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Sair
-          </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggle}
+                aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+                title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+              >
+                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={signOut} aria-label="Sair">
+                <LogOut className="h-4 w-4 lg:mr-2" />
+                <span className="hidden lg:inline">Sair</span>
+              </Button>
+            </div>
+          </header>
+
+          {/* Main */}
+          <main className="flex-1 container mx-auto px-3 lg:px-6 py-4 lg:py-6 pb-24 lg:pb-6">
+            {activeTab === 'dashboard' && (
+              <Dashboard
+                metrics={metrics}
+                transactions={filteredTransactions}
+                loading={initialLoading || !hasLoadedOnce}
+                loadError={loadError}
+                filters={filters}
+                onFiltersChange={setFilters}
+                onDeleteTransaction={deleteTransaction}
+                onUpdateTransaction={updateTransaction}
+                onRetry={refetch}
+                onNavigate={setActiveTab}
+              />
+            )}
+            {activeTab === 'investments' && <InvestmentsTab />}
+            {activeTab === 'chat' && (
+              <div className="h-[calc(100dvh-9rem)] lg:h-[calc(100dvh-7rem)]">
+                <ChatInterface />
+              </div>
+            )}
+            {activeTab === 'add' && (
+              <div className="max-w-md mx-auto">
+                <TransactionForm />
+              </div>
+            )}
+            {activeTab === 'import' && <ImportWizard />}
+            {activeTab === 'reports' && <ReportsTab />}
+          </main>
+
+          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-5">
-            <TabsTrigger value="dashboard" className="flex items-center gap-1.5">
-              <LayoutDashboard className="h-4 w-4" />
-              <span className="hidden sm:inline">Dashboard</span>
-            </TabsTrigger>
-            <TabsTrigger value="investments" className="flex items-center gap-1.5">
-              <Briefcase className="h-4 w-4" />
-              <span className="hidden sm:inline">Investimentos</span>
-            </TabsTrigger>
-            <TabsTrigger value="chat" className="flex items-center gap-1.5">
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">Chat</span>
-            </TabsTrigger>
-            <TabsTrigger value="add" className="flex items-center gap-1.5">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Adicionar</span>
-            </TabsTrigger>
-            <TabsTrigger value="import" className="flex items-center gap-1.5">
-              <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">Importar</span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dashboard">
-            <Dashboard
-              metrics={metrics}
-              transactions={filteredTransactions}
-              loading={initialLoading || !hasLoadedOnce}
-              loadError={loadError}
-              filters={filters}
-              onFiltersChange={setFilters}
-              onDeleteTransaction={deleteTransaction}
-              onUpdateTransaction={updateTransaction}
-              onRetry={refetch}
-            />
-          </TabsContent>
-
-          <TabsContent value="investments">
-            <InvestmentsTab />
-          </TabsContent>
-
-          <TabsContent value="chat" className="h-[calc(100vh-200px)]">
-            <ChatInterface />
-          </TabsContent>
-
-          <TabsContent value="add">
-            <div className="max-w-md mx-auto">
-              <TransactionForm />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="import">
-            <ImportWizard />
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
+      </div>
+    </SidebarProvider>
   );
 }
