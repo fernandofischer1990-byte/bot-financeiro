@@ -46,11 +46,19 @@ import { getCachedWebSearch, setCachedWebSearch } from '@/lib/webSearchCache';
 const CHAT_TIMEOUT_MS = 60000;
 
 const QUICK_ACTIONS = [
-  { label: 'Adicionar despesa', icon: TrendingDown },
-  { label: 'Adicionar receita', icon: PlusCircle },
-  { label: '/monthly_report', icon: BarChart3 },
-  { label: 'Analisar meus gastos', icon: TrendingUp },
-  { label: 'Score financeiro', icon: Activity },
+  { label: 'Qual meu patrimônio?', icon: Activity },
+  { label: 'Quanto gastei este mês?', icon: TrendingDown },
+  { label: 'Analise minhas despesas', icon: BarChart3 },
+  { label: 'Mostre meus investimentos', icon: TrendingUp },
+  { label: 'Cotação do dólar', icon: Globe },
+  { label: 'Quanto posso economizar?', icon: PlusCircle },
+];
+
+const INPUT_SUGGESTIONS = [
+  'Quanto gastei com alimentação?',
+  'Qual minha média mensal?',
+  'Cotação do euro hoje',
+  'Score financeiro',
 ];
 
 type AddTxPayload = Extract<Action, { type: 'add_transaction' }>['payload'];
