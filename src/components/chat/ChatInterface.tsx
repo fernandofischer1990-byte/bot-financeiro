@@ -548,10 +548,8 @@ export function ChatInterface() {
       </ScrollArea>
 
       {/* Input */}
-      <div className="p-4 border-t">
-        <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
-      {/* Input */}
       <div className="p-3 lg:p-4 border-t space-y-2">
+
         {messages.length > 0 && !isStreaming && (
           <div className="flex gap-1.5 overflow-x-auto chat-scrollbar pb-1">
             {INPUT_SUGGESTIONS.map((s) => (
