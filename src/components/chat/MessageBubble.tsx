@@ -100,10 +100,17 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
 
     if (!displayContent) return null;
 
+    let time = '';
+    try {
+      if (message.created_at) {
+        time = new Date(message.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      }
+    } catch { /* ignore */ }
+
     return (
-      <div ref={ref} className={cn('flex gap-2', isUser && 'flex-row-reverse')}>
+      <div ref={ref} className={cn('flex gap-2 animate-fade-in', isUser && 'flex-row-reverse')}>
         <div className={cn(
-          'p-2 rounded-full flex-shrink-0',
+          'p-2 rounded-full flex-shrink-0 h-8 w-8 flex items-center justify-center',
           isUser ? 'bg-primary' : 'bg-muted'
         )}>
           {isUser ? (
@@ -112,15 +119,21 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
             <Bot className="h-4 w-4" />
           )}
         </div>
-        <div className={cn(
-          'max-w-[80%] rounded-2xl px-4 py-2',
-          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
-        )}>
-          <div className="text-sm">
-            {isUser ? displayContent : renderMarkdown(displayContent)}
+        <div className={cn('max-w-[80%] flex flex-col gap-1', isUser && 'items-end')}>
+          <div className={cn(
+            'rounded-2xl px-4 py-2',
+            isUser ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted rounded-tl-sm'
+          )}>
+            <div className="text-sm">
+              {isUser ? displayContent : renderMarkdown(displayContent)}
+            </div>
           </div>
+          {time && (
+            <span className="text-[10px] text-muted-foreground px-1 tabular-nums">{time}</span>
+          )}
         </div>
       </div>
     );
   }
 );
+
