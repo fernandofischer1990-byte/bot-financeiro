@@ -217,12 +217,46 @@ export function ChatInterface() {
     addMessage('assistant', JSON.stringify({ message: parts.join('\n'), actions: [] }));
   }, [messages.length, transactions.length, monthlyMetrics, savingsRate, healthScore.score, spendingInsights, addMessage]);
 
+  // Smart auto-scroll: only follow when user is near the bottom; otherwise show "new message" button.
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewBelow, setHasNewBelow] = useState(false);
+
+  const getViewport = useCallback((): HTMLElement | null => {
+    return scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const viewport = getViewport();
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+    setHasNewBelow(false);
+  }, [getViewport]);
+
+  // Track scroll position
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    const viewport = getViewport();
+    if (!viewport) return;
+    const handleScroll = () => {
+      const threshold = 80;
+      const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < threshold;
+      setIsAtBottom(atBottom);
+      if (atBottom) setHasNewBelow(false);
+    };
+    viewport.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => viewport.removeEventListener('scroll', handleScroll);
+  }, [getViewport]);
+
+  // Auto-scroll on new content if user is at bottom; else flag new content
+  useEffect(() => {
+    if (isAtBottom) {
+      scrollToBottom('smooth');
+    } else if (messages.length > 0 || streamingContent) {
+      setHasNewBelow(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, streamingContent, pendingAdds]);
+
 
   // ── Web search via edge function ───────────────────────────────────
   const [webSearching, setWebSearching] = useState<string | null>(null);
