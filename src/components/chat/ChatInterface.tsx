@@ -10,7 +10,7 @@ import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown } from 'lucide-react';
 import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INVESTMENT_TYPES, INVESTMENT_OPERATIONS, getInvestmentTypeLabel, getInvestmentOperationLabel } from '@/lib/constants';
 import { parseAIResponse, Action } from '@/lib/actionParser';
 import { extractPartialMessage } from '@/lib/streamingMessage';
