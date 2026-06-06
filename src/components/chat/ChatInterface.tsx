@@ -519,67 +519,88 @@ export function ChatInterface() {
       </div>
 
       {/* Messages */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 chat-scrollbar">
-        <div className="space-y-4">
-          {messages.length === 0 && !streamingContent && (
-            <div className="text-center py-8">
-              <Bot className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-              <p className="text-muted-foreground text-sm">
-                Olá! Sou o FinBot Copilot. 🚀<br />
-                Analiso suas finanças e forneço insights inteligentes.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
-                  <button
-                    key={label}
-                    onClick={() => setInput(label)}
-                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
-                  >
-                    <Icon className="h-3 w-3" />
-                    {label}
-                  </button>
-                ))}
+      <div className="relative flex-1 min-h-0">
+        <ScrollArea ref={scrollAreaRef} className="h-full p-4 chat-scrollbar">
+          <div className="space-y-4">
+            {messages.length === 0 && !streamingContent && (
+              <div className="text-center py-8">
+                <Bot className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground text-sm">
+                  Olá! Sou o FinBot Copilot. 🚀<br />
+                  Analiso suas finanças e forneço insights inteligentes.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                  {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
+                    <button
+                      key={label}
+                      onClick={() => setInput(label)}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+                    >
+                      <Icon className="h-3 w-3" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} cleanContent={cleanContentForDisplay} />
-          ))}
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} cleanContent={cleanContentForDisplay} />
+            ))}
 
-          {streamingContent && (
-            <MessageBubble
-              message={{ id: 'streaming', role: 'assistant', content: JSON.stringify({ message: streamingContent }), user_id: '', metadata: null, created_at: new Date().toISOString() }}
-              cleanContent={cleanContentForDisplay}
-            />
-          )}
+            {streamingContent && (
+              <MessageBubble
+                message={{ id: 'streaming', role: 'assistant', content: JSON.stringify({ message: streamingContent }), user_id: '', metadata: null, created_at: new Date().toISOString() }}
+                cleanContent={cleanContentForDisplay}
+              />
+            )}
 
-          {isStreaming && !streamingContent && (
-            <div className="flex gap-2 items-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Analisando...</span>
-            </div>
-          )}
+            {isStreaming && !streamingContent && (
+              <div className="flex gap-2 items-center">
+                <div className="p-2 rounded-full bg-muted">
+                  <Bot className="h-4 w-4" />
+                </div>
+                <div className="bg-muted rounded-2xl px-4 py-3 flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground mr-1">FinBot está analisando</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            )}
 
-          {webSearching && (
-            <div className="flex gap-2 items-center text-primary">
-              <Globe className="h-4 w-4 animate-pulse" />
-              <span className="text-sm">Pesquisando na internet: <em>{webSearching}</em></span>
-            </div>
-          )}
+            {webSearching && (
+              <div className="flex gap-2 items-center text-primary">
+                <Globe className="h-4 w-4 animate-pulse" />
+                <span className="text-sm">Pesquisando na internet: <em>{webSearching}</em></span>
+              </div>
+            )}
 
-          {pendingAdds.map((p, idx) => (
-            <PendingAddCard
-              key={idx}
-              pending={p}
-              monthlyIncome={monthlyMetrics.income_month}
-              onChange={(patch) => updatePending(idx, patch)}
-              onConfirm={() => handleConfirmAdd(idx)}
-              onCancel={() => removePending(idx)}
-            />
-          ))}
-        </div>
-      </ScrollArea>
+            {pendingAdds.map((p, idx) => (
+              <PendingAddCard
+                key={idx}
+                pending={p}
+                monthlyIncome={monthlyMetrics.income_month}
+                onChange={(patch) => updatePending(idx, patch)}
+                onConfirm={() => handleConfirmAdd(idx)}
+                onCancel={() => removePending(idx)}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+
+        {/* Floating "scroll to bottom" button */}
+        {(!isAtBottom || hasNewBelow) && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom('smooth')}
+            className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-elegant hover:opacity-90 transition-all animate-fade-in"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            {hasNewBelow ? 'Nova mensagem' : 'Ir para o final'}
+          </button>
+        )}
+      </div>
 
       {/* Input */}
       <div className="p-3 lg:p-4 border-t space-y-2">
@@ -617,6 +638,7 @@ export function ChatInterface() {
           )}
         </form>
       </div>
+
 
       {/* Confirmation Dialog for Delete All */}
       <AlertDialog open={!!pendingDeleteAll} onOpenChange={(open) => !open && setPendingDeleteAll(null)}>
