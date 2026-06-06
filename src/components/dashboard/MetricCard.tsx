@@ -1,4 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatCurrency } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { LucideIcon, TrendingUp, TrendingDown } from 'lucide-react';
@@ -20,6 +21,19 @@ function fmt(value: number, type: MetricCardProps['format']) {
   return formatCurrency(value);
 }
 
+/**
+ * Pick a font size that comfortably fits the formatted value without truncating.
+ * Never uses ellipsis — financial values must always be fully readable.
+ */
+function valueFontSize(text: string): string {
+  const len = text.length;
+  if (len <= 10) return 'text-2xl sm:text-[1.6rem]';
+  if (len <= 13) return 'text-xl sm:text-2xl';
+  if (len <= 16) return 'text-lg sm:text-xl';
+  if (len <= 20) return 'text-base sm:text-lg';
+  return 'text-sm sm:text-base';
+}
+
 export function MetricCard({
   title,
   value,
@@ -31,6 +45,9 @@ export function MetricCard({
   className,
 }: MetricCardProps) {
   const TrendIcon = trend && trend.value >= 0 ? TrendingUp : TrendingDown;
+  const display = fmt(value, format);
+  const sizeClass = valueFontSize(display);
+
   return (
     <Card
       className={cn(
@@ -52,19 +69,32 @@ export function MetricCard({
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0 flex-1">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-            <p
-              className={cn(
-                'text-2xl font-bold tracking-tight truncate',
-                variant === 'income' && 'text-success',
-                variant === 'expense' && 'text-destructive',
-                variant === 'investment' && 'text-primary',
-                variant === 'networth' && 'text-primary'
-              )}
-            >
-              {fmt(value, format)}
-            </p>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p
+                    className={cn(
+                      'font-bold tracking-tight tabular-nums break-words leading-tight',
+                      sizeClass,
+                      variant === 'income' && 'text-success',
+                      variant === 'expense' && 'text-destructive',
+                      variant === 'investment' && 'text-primary',
+                      variant === 'networth' && 'text-primary'
+                    )}
+                  >
+                    {display}
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <div className="text-xs">
+                    <div className="font-semibold">{title}</div>
+                    <div className="tabular-nums">{display}</div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {(subtitle || trend) && (
-              <div className="flex items-center gap-2 pt-1 text-xs">
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
                 {trend && (
                   <span
                     className={cn(
@@ -77,7 +107,7 @@ export function MetricCard({
                     {trend.value.toFixed(1)}%
                   </span>
                 )}
-                {subtitle && <span className="text-muted-foreground truncate">{subtitle}</span>}
+                {subtitle && <span className="text-muted-foreground">{subtitle}</span>}
               </div>
             )}
           </div>
