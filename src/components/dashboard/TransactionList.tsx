@@ -3,13 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Transaction } from '@/contexts/TransactionsContext';
 import { formatCurrency, formatDate, getCategoryLabel, getCategoryIcon, getInvestmentTypeLabel, getInvestmentTypeIcon, getInvestmentOperationLabel } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-import { Trash2, ArrowUpCircle, ArrowDownCircle, Briefcase, Pencil, ArrowUpDown } from 'lucide-react';
+import { Trash2, ArrowUpCircle, ArrowDownCircle, Briefcase, Pencil, ArrowUpDown, Search, X } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
 
 interface TransactionListProps {
   transactions: Transaction[];
