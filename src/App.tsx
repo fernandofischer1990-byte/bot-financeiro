@@ -7,6 +7,7 @@ import { TransactionsProvider } from "@/contexts/TransactionsContext";
 import { InvestmentsProvider } from "@/contexts/InvestmentsContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import OAuthConsent from "./pages/OAuthConsent";
 
 const App = () => (
   <ThemeProvider>
@@ -18,6 +19,7 @@ const App = () => (
             <BrowserRouter>
               <Routes>
                 <Route path="/" element={<Index />} />
+                <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
