@@ -37,7 +37,7 @@ const RequestClarificationSchema = z.object({
   type: z.literal('request_clarification'),
   payload: z.object({
     intent: z.string(),
-    partial: z.record(z.any()).optional(),
+    partial: z.record(z.string(), z.any()).optional(),
     missing_field: z.string().optional(),
   }),
 });
