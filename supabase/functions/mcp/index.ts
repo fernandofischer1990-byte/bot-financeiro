@@ -6,15 +6,19 @@
 import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
 
 // src/lib/mcp/tools/add-transaction.ts
-import { createClient } from "npm:@supabase/supabase-js@^2.90.1";
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { z } from "npm:zod@^4.4.3";
-function client(ctx) {
+
+// src/lib/mcp/supabase.ts
+import { createClient } from "npm:@supabase/supabase-js@^2.90.1";
+function supabaseForUser(ctx) {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
     global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
     auth: { persistSession: false, autoRefreshToken: false }
   });
 }
+
+// src/lib/mcp/tools/add-transaction.ts
 var add_transaction_default = defineTool({
   name: "add_transaction",
   title: "Add transaction",
@@ -40,7 +44,7 @@ var add_transaction_default = defineTool({
         isError: true
       };
     }
-    const { data, error } = await client(ctx).from("transactions").insert({
+    const { data, error } = await supabaseForUser(ctx).from("transactions").insert({
       user_id: ctx.getUserId(),
       type: input.type,
       amount: input.amount,
@@ -61,15 +65,8 @@ var add_transaction_default = defineTool({
 });
 
 // src/lib/mcp/tools/list-transactions.ts
-import { createClient as createClient2 } from "npm:@supabase/supabase-js@^2.90.1";
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { z as z2 } from "npm:zod@^4.4.3";
-function client2(ctx) {
-  return createClient2(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-}
 var list_transactions_default = defineTool2({
   name: "list_transactions",
   title: "List transactions",
@@ -86,7 +83,7 @@ var list_transactions_default = defineTool2({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    let q = client2(ctx).from("transactions").select("id, type, amount, category, description, transaction_date, institution, investment_type, investment_operation").eq("user_id", ctx.getUserId()).order("transaction_date", { ascending: false }).limit(limit ?? 50);
+    let q = supabaseForUser(ctx).from("transactions").select("id, type, amount, category, description, transaction_date, institution, investment_type, investment_operation").eq("user_id", ctx.getUserId()).order("transaction_date", { ascending: false }).limit(limit ?? 50);
     if (type) q = q.eq("type", type);
     if (category) q = q.eq("category", category);
     if (from) q = q.gte("transaction_date", from);
@@ -101,15 +98,8 @@ var list_transactions_default = defineTool2({
 });
 
 // src/lib/mcp/tools/delete-transaction.ts
-import { createClient as createClient3 } from "npm:@supabase/supabase-js@^2.90.1";
 import { defineTool as defineTool3 } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { z as z3 } from "npm:zod@^4.4.3";
-function client3(ctx) {
-  return createClient3(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-}
 var delete_transaction_default = defineTool3({
   name: "delete_transaction",
   title: "Delete transaction",
@@ -122,22 +112,15 @@ var delete_transaction_default = defineTool3({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const { error } = await client3(ctx).from("transactions").delete().eq("user_id", ctx.getUserId()).eq("id", id);
+    const { error } = await supabaseForUser(ctx).from("transactions").delete().eq("user_id", ctx.getUserId()).eq("id", id);
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     return { content: [{ type: "text", text: `Deleted ${id}` }] };
   }
 });
 
 // src/lib/mcp/tools/get-financial-summary.ts
-import { createClient as createClient4 } from "npm:@supabase/supabase-js@^2.90.1";
 import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { z as z4 } from "npm:zod@^4.4.3";
-function client4(ctx) {
-  return createClient4(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-}
 var get_financial_summary_default = defineTool4({
   name: "get_financial_summary",
   title: "Get financial summary",
@@ -151,7 +134,7 @@ var get_financial_summary_default = defineTool4({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    let q = client4(ctx).from("transactions").select("type, amount, category, investment_operation").eq("user_id", ctx.getUserId());
+    let q = supabaseForUser(ctx).from("transactions").select("type, amount, category, investment_operation").eq("user_id", ctx.getUserId());
     if (from) q = q.gte("transaction_date", from);
     if (to) q = q.lte("transaction_date", to);
     const { data, error } = await q;
