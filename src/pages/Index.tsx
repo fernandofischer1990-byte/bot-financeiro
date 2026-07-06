@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
@@ -19,6 +19,16 @@ import { Loader2, LogOut, Moon, Sun } from 'lucide-react';
 
 export default function Index() {
   const { user, loading: authLoading, signOut } = useAuth();
+
+  // After sign-in, honor a same-origin `?next=` redirect (used by the OAuth consent page).
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get('next');
+    if (next && next.startsWith('/') && !next.startsWith('//')) {
+      window.location.replace(next);
+    }
+  }, [user]);
 
   if (authLoading) {
     return (
