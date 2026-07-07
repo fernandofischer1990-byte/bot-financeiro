@@ -11,8 +11,16 @@ import { z } from "npm:zod@^4.4.3";
 
 // src/lib/mcp/supabase.ts
 import { createClient } from "npm:@supabase/supabase-js@^2.90.1";
+function getEnv(name) {
+  const g = globalThis;
+  const denoVal = g?.Deno?.env?.get?.(name);
+  if (denoVal) return denoVal;
+  const procVal = g?.process?.env?.[name];
+  if (procVal) return procVal;
+  throw new Error(`Missing env ${name}`);
+}
 function supabaseForUser(ctx) {
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+  return createClient(getEnv("SUPABASE_URL"), getEnv("SUPABASE_PUBLISHABLE_KEY"), {
     global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
     auth: { persistSession: false, autoRefreshToken: false }
   });

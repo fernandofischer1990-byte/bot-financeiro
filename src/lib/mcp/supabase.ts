@@ -1,10 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 import type { ToolContext } from "@lovable.dev/mcp-js";
 
-declare const process: { env: Record<string, string | undefined> };
+// Read env lazily inside the factory. Use Deno.env in the edge runtime;
+// fall back to process.env only for local Node-based tooling.
+function getEnv(name: string): string {
+  // deno-lint-ignore no-explicit-any
+  const g: any = globalThis as any;
+  const denoVal = g?.Deno?.env?.get?.(name);
+  if (denoVal) return denoVal;
+  const procVal = g?.process?.env?.[name];
+  if (procVal) return procVal;
+  throw new Error(`Missing env ${name}`);
+}
 
 export function supabaseForUser(ctx: ToolContext) {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
+  return createClient(getEnv("SUPABASE_URL"), getEnv("SUPABASE_PUBLISHABLE_KEY"), {
     global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
