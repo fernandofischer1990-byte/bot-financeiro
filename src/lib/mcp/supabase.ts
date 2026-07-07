@@ -14,7 +14,15 @@ function getEnv(name: string): string {
 }
 
 export function supabaseForUser(ctx: ToolContext) {
-  return createClient(getEnv("SUPABASE_URL"), getEnv("SUPABASE_PUBLISHABLE_KEY"), {
+  const url = getEnv("SUPABASE_URL");
+  // Edge Functions inject SUPABASE_ANON_KEY by default; PUBLISHABLE_KEY is not guaranteed.
+  let key: string;
+  try {
+    key = getEnv("SUPABASE_ANON_KEY");
+  } catch {
+    key = getEnv("SUPABASE_PUBLISHABLE_KEY");
+  }
+  return createClient(url, key, {
     global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });

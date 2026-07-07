@@ -20,7 +20,14 @@ function getEnv(name) {
   throw new Error(`Missing env ${name}`);
 }
 function supabaseForUser(ctx) {
-  return createClient(getEnv("SUPABASE_URL"), getEnv("SUPABASE_PUBLISHABLE_KEY"), {
+  const url = getEnv("SUPABASE_URL");
+  let key;
+  try {
+    key = getEnv("SUPABASE_ANON_KEY");
+  } catch {
+    key = getEnv("SUPABASE_PUBLISHABLE_KEY");
+  }
+  return createClient(url, key, {
     global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
     auth: { persistSession: false, autoRefreshToken: false }
   });
