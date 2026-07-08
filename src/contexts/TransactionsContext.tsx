@@ -318,6 +318,38 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     }
   }, [authLoading, fetchTransactions]);
 
+  // Realtime — reflect external mutations (e.g. via MCP) in the dashboard
+  useEffect(() => {
+    if (!user) return;
+    const castTx = (row: Record<string, unknown>): Transaction => ({
+      ...(row as any),
+      financial_scope: (row as any).financial_scope ?? ((row as any).type === 'investment' ? 'investment' : 'operational'),
+      investment_operation: (row as any).investment_operation ?? null,
+      investment_type: (row as any).investment_type ?? null,
+      institution: (row as any).institution ?? null,
+    });
+    const channel = supabase
+      .channel(`transactions:${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const tx = castTx(payload.new as Record<string, unknown>);
+        setTransactions(prev => prev.some(t => t.id === tx.id) ? prev : sortByDateDesc([tx, ...prev]));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const tx = castTx(payload.new as Record<string, unknown>);
+        setTransactions(prev => sortByDateDesc(prev.map(t => t.id === tx.id ? tx : t)));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const id = (payload.old as any)?.id;
+        if (!id) return;
+        setTransactions(prev => prev.filter(t => t.id !== id));
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+
   const refetch = useCallback(() => fetchTransactions(false), [fetchTransactions]);
 
   const value: TransactionsContextValue = useMemo(() => ({
