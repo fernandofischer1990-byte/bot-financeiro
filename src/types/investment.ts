@@ -30,6 +30,9 @@ export interface Investment {
   imported_at: string | null;
   created_at: string;
   updated_at: string;
+  // Metadados fiscais (IRPF) — opcionais
+  averagePrice?: number;       // Custo médio de aquisição (Bens e Direitos)
+  custodianCnpj?: string;      // CNPJ da corretora/custodiante
 }
 
 export interface InvestmentInput {
@@ -46,4 +49,7 @@ export interface InvestmentInput {
   imported_from?: string;
   source_file_name?: string | null;
   imported_at?: string | null;
+  // Metadados fiscais (IRPF) — opcionais
+  averagePrice?: number;
+  custodianCnpj?: string;
 }
