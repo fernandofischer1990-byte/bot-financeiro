@@ -49,4 +49,7 @@ export interface InvestmentInput {
   imported_from?: string;
   source_file_name?: string | null;
   imported_at?: string | null;
+  // Metadados fiscais (IRPF) — opcionais
+  averagePrice?: number;
+  custodianCnpj?: string;
 }
