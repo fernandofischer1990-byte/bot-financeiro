@@ -41,6 +41,8 @@ export async function insertInvestment(userId: string, input: InvestmentInput): 
       imported_from: input.imported_from ?? 'manual',
       source_file_name: input.source_file_name ?? null,
       imported_at: input.imported_at ?? null,
+      average_price: input.averagePrice ?? null,
+      custodian_cnpj: input.custodianCnpj ?? null,
     })
     .select()
     .single();
