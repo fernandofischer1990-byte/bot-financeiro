@@ -116,8 +116,6 @@ export async function updateTransactionById(
   id: string,
   updates: Partial<Transaction>
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase
-    .from('transactions')
   const payload: Record<string, unknown> = {
     type: updates.type,
     amount: updates.amount,
