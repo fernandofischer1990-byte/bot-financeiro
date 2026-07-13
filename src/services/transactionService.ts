@@ -63,6 +63,9 @@ export async function insertTransaction(
       investment_operation: input.type === 'investment' ? input.investment_operation ?? null : null,
       investment_type: input.type === 'investment' ? input.investment_type ?? null : null,
       institution: input.type === 'investment' ? input.institution ?? null : null,
+      tax_id: input.taxId ?? null,
+      irpf_category: input.irpfCategory ?? null,
+      receipt_url: input.receiptUrl ?? null,
     })
     .select()
     .single();
