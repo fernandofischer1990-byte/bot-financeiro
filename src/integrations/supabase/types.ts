@@ -133,7 +133,9 @@ export type Database = {
       }
       investments: {
         Row: {
+          average_price: number | null
           created_at: string
+          custodian_cnpj: string | null
           end_date: string | null
           id: string
           imported_at: string | null
@@ -152,7 +154,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          average_price?: number | null
           created_at?: string
+          custodian_cnpj?: string | null
           end_date?: string | null
           id?: string
           imported_at?: string | null
@@ -171,7 +175,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          average_price?: number | null
           created_at?: string
+          custodian_cnpj?: string | null
           end_date?: string | null
           id?: string
           imported_at?: string | null
@@ -250,7 +256,10 @@ export type Database = {
           institution: string | null
           investment_operation: string | null
           investment_type: string | null
+          irpf_category: string | null
+          receipt_url: string | null
           source: string
+          tax_id: string | null
           transaction_date: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
@@ -266,7 +275,10 @@ export type Database = {
           institution?: string | null
           investment_operation?: string | null
           investment_type?: string | null
+          irpf_category?: string | null
+          receipt_url?: string | null
           source?: string
+          tax_id?: string | null
           transaction_date?: string
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
@@ -282,7 +294,10 @@ export type Database = {
           institution?: string | null
           investment_operation?: string | null
           investment_type?: string | null
+          irpf_category?: string | null
+          receipt_url?: string | null
           source?: string
+          tax_id?: string | null
           transaction_date?: string
           type?: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
