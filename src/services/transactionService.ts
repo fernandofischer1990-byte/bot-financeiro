@@ -26,7 +26,7 @@ export async function fetchUserTransactions(userId: string): Promise<{ data: Tra
   try {
     const { data, error } = await supabase
       .from('transactions')
-      .select("id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,financial_scope,investment_operation,investment_type,institution")
+      .select("id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,financial_scope,investment_operation,investment_type,institution,tax_id,irpf_category,receipt_url")
       .eq('user_id', userId)
       .order('transaction_date', { ascending: false })
       .limit(1000);
