@@ -67,6 +67,8 @@ export async function insertMultipleInvestments(userId: string, inputs: Investme
     imported_from: input.imported_from ?? 'xlsx',
     source_file_name: input.source_file_name ?? null,
     imported_at: input.imported_at ?? new Date().toISOString(),
+    average_price: input.averagePrice ?? null,
+    custodian_cnpj: input.custodianCnpj ?? null,
   }));
   const { data, error } = await supabase.from('investments').insert(rows).select();
   if (error) return { data: [], error: error.message };
