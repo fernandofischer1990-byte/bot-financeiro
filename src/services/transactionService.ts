@@ -118,14 +118,21 @@ export async function updateTransactionById(
 ): Promise<{ error: string | null }> {
   const { error } = await supabase
     .from('transactions')
-    .update({
-      type: updates.type,
-      amount: updates.amount,
-      category: updates.category,
-      description: updates.description,
-      transaction_date: updates.transaction_date,
-      updated_at: new Date().toISOString(),
-    })
+  const payload: Record<string, unknown> = {
+    type: updates.type,
+    amount: updates.amount,
+    category: updates.category,
+    description: updates.description,
+    transaction_date: updates.transaction_date,
+    updated_at: new Date().toISOString(),
+  };
+  if ('taxId' in updates) payload.tax_id = updates.taxId ?? null;
+  if ('irpfCategory' in updates) payload.irpf_category = updates.irpfCategory ?? null;
+  if ('receiptUrl' in updates) payload.receipt_url = updates.receiptUrl ?? null;
+
+  const { error } = await supabase
+    .from('transactions')
+    .update(payload as never)
     .eq('id', id)
     .eq('user_id', userId);
 
