@@ -1,49 +1,85 @@
+## Objetivo
+Enriquecer os contratos de dados (`Transaction`, `Investment`) com metadados fiscais opcionais e criar a interface `IrpfReport`, preparando a fundação para o épico de Relatório Anual de IRPF sem quebrar nenhum componente atual.
 
-## Migração para Login Exclusivo com Google
+Todos os novos campos são **opcionais** (`?`), portanto totalmente retrocompatíveis: nenhum construtor, serviço, formulário ou consumidor existente precisa mudar. Nenhuma migração de banco será feita agora — este passo é apenas de tipagem no frontend.
 
-Nota: o projeto roda em **Lovable Cloud (Supabase)**, não Firebase. Aplico o objetivo da sprint no stack real, mantendo o `auth.uid` como chave em todas as tabelas (`transactions`, `investments`, `profiles`, `chat_messages`, `analytics_events`, `import_history`, `mapping_templates`, `category_mappings`). Nenhuma tabela, RLS, cálculo financeiro ou dado é alterado.
+## Arquivos a alterar / criar
 
-### 1. Backend / Auth config
-- Habilitar Google e desabilitar email como método via `configure_social_auth({ providers: ["google"], disable_providers: ["email"] })`.
-- Isso instala `@lovable.dev/cloud-auth-js` e gera `src/integrations/lovable/` (não editar manualmente).
-- O trigger `handle_new_user` já cria automaticamente `public.profiles` no primeiro login com `full_name` vindo do metadata do Google — não precisa mexer.
+### 1. `src/contexts/TransactionsContext.tsx` — estender `Transaction` e `TransactionInput`
+Adicionar ao final da interface `Transaction` (linhas 21–36) e espelhar em `TransactionInput` (linhas 38–49):
 
-### 2. `useAuth` (`src/hooks/useAuth.tsx`)
-Refatorar mantendo o mesmo shape público mínimo:
-- Remover `signUp`, `signIn` (email/senha).
-- Adicionar `signInWithGoogle()` usando `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` com tratamento de `result.error`, `result.redirected` e casos "popup fechado / cancelado".
-- Manter `signOut`, listener `onAuthStateChange`, recuperação de sessão e safety-net de 8s (persistência oficial do Supabase já cobre refresh automático).
-- Atualizar `trackEvent` para `method: 'google'`.
+```ts
+// Metadados fiscais (IRPF) — opcionais, populados sob demanda
+taxId?: string;              // CPF/CNPJ da contraparte
+irpfCategory?: string;       // Código Receita: "Despesa Médica", "Rendimento Isento" etc.
+receiptUrl?: string;         // URL do comprovante (malha fina)
+```
 
-### 3. Nova `AuthPage` (`src/components/auth/AuthPage.tsx`)
-Reescrever no tema Midnight Indigo atual:
-- Logo FinBot + nome + tagline curta.
-- Botão único **"Entrar com Google"** (com ícone Google oficial em SVG inline, spinner durante loading, disabled enquanto processa).
-- Copy: "Seus dados permanecem protegidos pela autenticação segura do Google."
-- Remover: inputs de email/senha/nome/confirmar senha, toggle login/cadastro, link "esqueci senha", mostrar/ocultar senha, toda validação de senha.
-- Estados tratados: loading, erro genérico (toast), popup cancelado (mensagem amigável, sem toast intrusivo).
+### 2. `src/types/investment.ts` — estender `Investment` e `InvestmentInput`
+Adicionar aos dois blocos:
 
-### 4. Limpeza técnica
-- Remover imports órfãos (`Input`, `Label`, `useState` de email/password, etc.).
-- Buscar e remover qualquer referência residual a `signUp`/`signIn`/`signInWithPassword`/`resetPasswordForEmail`/`updateUser({ password })` no `src/`.
-- Não existem rotas separadas `/register`, `/forgot-password`, `/reset-password` no projeto (verificado em `App.tsx`), então nada de rota para remover.
-- Rodar typecheck; garantir zero warnings/erros.
+```ts
+averagePrice?: number;       // Custo médio de aquisição (Bens e Direitos)
+custodianCnpj?: string;      // CNPJ da corretora/custodiante
+```
 
-### 5. Segurança e UX
-- Sessão persistente e refresh automático já são default do cliente Supabase existente (`persistSession: true, autoRefreshToken: true`). Não duplicar listeners.
-- Loading global do `AuthProvider` já evita flash de tela.
-- Após `SIGNED_IN`, `Index.tsx` renderiza dashboard automaticamente — sem reload, sem flicker.
+### 3. `src/types/irpf.ts` — novo arquivo
+Criar interface `IrpfReport` estruturando a saída do futuro motor de cálculo. Cada grupo carrega `calendarYear` e `total`, mais uma lista de itens detalhados (também tipados) para permitir drill-down futuro:
 
-### Fora de escopo (não vou tocar)
-- Nenhuma tabela, RLS, edge function ou lógica financeira.
-- Nenhum recálculo de saldo/receita/despesa/investimento.
-- Estrutura do banco permanece intacta; usuários existentes que fizerem login pelo Google com o mesmo email do cadastro atual recebem novo `auth.uid` (contas criadas por email/senha não são automaticamente mescladas — isso é comportamento do Supabase). Se você tiver usuários reais em produção que precisam manter dados, me avise antes de aplicar para eu preparar uma migração de vínculo por email.
+```ts
+export interface IrpfReportGroup<TItem> {
+  calendarYear: number;
+  total: number;
+  items: TItem[];
+}
 
-### Arquivos afetados
-- `src/hooks/useAuth.tsx` (refatorar)
-- `src/components/auth/AuthPage.tsx` (reescrever)
-- `src/integrations/lovable/*` (gerado automaticamente pela ferramenta)
-- `package.json` (dependência `@lovable.dev/cloud-auth-js` adicionada pela ferramenta)
+export interface BemDireitoItem {
+  code: string;              // ex: "31" Ações, "41" Poupança
+  description: string;
+  taxId?: string;             // CNPJ do custodiante
+  situacaoAnterior: number;   // saldo em 31/12 do ano-1
+  situacaoAtual: number;      // saldo em 31/12 do ano-calendário
+}
 
-### Critérios de aceite atendidos
-Login apenas via Google · sem cadastro/recuperação/troca de senha · UID (`auth.uid`) permanece a chave · nenhuma tabela alterada · nenhum dado perdido · build limpa.
+export interface RendimentoIsentoItem {
+  code: string;              // ex: "12" Rendimentos poupança
+  sourceName: string;
+  sourceTaxId?: string;
+  amount: number;
+}
+
+export interface RendimentoTributavelItem {
+  sourceName: string;
+  sourceTaxId?: string;
+  amount: number;
+  withheldTax: number;
+}
+
+export interface PagamentoEfetuadoItem {
+  code: string;              // ex: "10" Médicos
+  beneficiaryName: string;
+  beneficiaryTaxId?: string;
+  amount: number;
+  reimbursed?: number;
+}
+
+export interface IrpfReport {
+  calendarYear: number;
+  generatedAt: string;       // ISO
+  bensEDireitos: IrpfReportGroup<BemDireitoItem>;
+  rendimentosIsentos: IrpfReportGroup<RendimentoIsentoItem>;
+  rendimentosTributaveis: IrpfReportGroup<RendimentoTributavelItem>;
+  pagamentosEfetuados: IrpfReportGroup<PagamentoEfetuadoItem>;
+}
+```
+
+## Verificação de retrocompatibilidade
+- Todos os novos campos em `Transaction`/`TransactionInput`/`Investment`/`InvestmentInput` são opcionais → nenhum `insert…`, form, cast (`castTransaction`, `castInvestment`) ou consumidor de dashboard precisa ser modificado.
+- Nenhuma alteração no schema do banco nesta etapa; PostgREST continua devolvendo as mesmas colunas e os novos campos ficarão simplesmente `undefined` até o épico seguinte adicionar colunas e mapeamento.
+- `IrpfReport` é um tipo novo isolado, sem imports em código existente.
+- Após aplicar, rodar `tsgo` para confirmar zero erros de tipo.
+
+## Fora de escopo (próximos passos do épico)
+- Migração SQL para persistir `tax_id`, `irpf_category`, `receipt_url`, `average_price`, `custodian_cnpj`.
+- Motor de cálculo que popula `IrpfReport`.
+- UI de captura destes metadados e tela de relatório.

@@ -33,6 +33,10 @@ export interface Transaction {
   investment_operation?: InvestmentOperation | null;
   investment_type?: string | null;
   institution?: string | null;
+  // Metadados fiscais (IRPF) — opcionais, populados sob demanda
+  taxId?: string;              // CPF/CNPJ da contraparte
+  irpfCategory?: string;       // Código Receita: "Despesa Médica", "Rendimento Isento" etc.
+  receiptUrl?: string;         // URL do comprovante (malha fina)
 }
 
 export interface TransactionInput {
@@ -46,6 +50,10 @@ export interface TransactionInput {
   investment_operation?: InvestmentOperation;
   investment_type?: string;
   institution?: string;
+  // Metadados fiscais (IRPF) — opcionais
+  taxId?: string;
+  irpfCategory?: string;
+  receiptUrl?: string;
 }
 
 export interface InvestmentSummary {
