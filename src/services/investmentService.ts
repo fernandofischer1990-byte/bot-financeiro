@@ -6,6 +6,8 @@ function castInvestment(row: Record<string, unknown>): Investment {
     ...row,
     initial_amount: Number(row.initial_amount ?? 0),
     metadata: (row.metadata as Record<string, unknown>) ?? {},
+    averagePrice: row.average_price != null ? Number(row.average_price) : undefined,
+    custodianCnpj: (row.custodian_cnpj as string | null | undefined) ?? undefined,
   } as Investment;
 }
 
