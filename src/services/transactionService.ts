@@ -12,6 +12,9 @@ function castTransaction(tx: Record<string, unknown>): Transaction {
     investment_operation: (tx.investment_operation as InvestmentOperation | null | undefined) ?? null,
     investment_type: (tx.investment_type as string | null | undefined) ?? null,
     institution: (tx.institution as string | null | undefined) ?? null,
+    taxId: (tx.tax_id as string | null | undefined) ?? undefined,
+    irpfCategory: (tx.irpf_category as string | null | undefined) ?? undefined,
+    receiptUrl: (tx.receipt_url as string | null | undefined) ?? undefined,
   } as Transaction;
 }
 
