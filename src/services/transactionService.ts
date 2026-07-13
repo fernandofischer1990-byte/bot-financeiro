@@ -12,6 +12,9 @@ function castTransaction(tx: Record<string, unknown>): Transaction {
     investment_operation: (tx.investment_operation as InvestmentOperation | null | undefined) ?? null,
     investment_type: (tx.investment_type as string | null | undefined) ?? null,
     institution: (tx.institution as string | null | undefined) ?? null,
+    taxId: (tx.tax_id as string | null | undefined) ?? undefined,
+    irpfCategory: (tx.irpf_category as string | null | undefined) ?? undefined,
+    receiptUrl: (tx.receipt_url as string | null | undefined) ?? undefined,
   } as Transaction;
 }
 
@@ -23,7 +26,7 @@ export async function fetchUserTransactions(userId: string): Promise<{ data: Tra
   try {
     const { data, error } = await supabase
       .from('transactions')
-      .select("id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,financial_scope,investment_operation,investment_type,institution")
+      .select("id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,financial_scope,investment_operation,investment_type,institution,tax_id,irpf_category,receipt_url")
       .eq('user_id', userId)
       .order('transaction_date', { ascending: false })
       .limit(1000);
@@ -60,6 +63,9 @@ export async function insertTransaction(
       investment_operation: input.type === 'investment' ? input.investment_operation ?? null : null,
       investment_type: input.type === 'investment' ? input.investment_type ?? null : null,
       institution: input.type === 'investment' ? input.institution ?? null : null,
+      tax_id: input.taxId ?? null,
+      irpf_category: input.irpfCategory ?? null,
+      receipt_url: input.receiptUrl ?? null,
     })
     .select()
     .single();
@@ -91,6 +97,9 @@ export async function insertMultipleTransactions(
         investment_operation: input.type === 'investment' ? input.investment_operation ?? null : null,
         investment_type: input.type === 'investment' ? input.investment_type ?? null : null,
         institution: input.type === 'investment' ? input.institution ?? null : null,
+        tax_id: input.taxId ?? null,
+        irpf_category: input.irpfCategory ?? null,
+        receipt_url: input.receiptUrl ?? null,
       }))
     )
     .select();
@@ -107,16 +116,21 @@ export async function updateTransactionById(
   id: string,
   updates: Partial<Transaction>
 ): Promise<{ error: string | null }> {
+  const payload: Record<string, unknown> = {
+    type: updates.type,
+    amount: updates.amount,
+    category: updates.category,
+    description: updates.description,
+    transaction_date: updates.transaction_date,
+    updated_at: new Date().toISOString(),
+  };
+  if ('taxId' in updates) payload.tax_id = updates.taxId ?? null;
+  if ('irpfCategory' in updates) payload.irpf_category = updates.irpfCategory ?? null;
+  if ('receiptUrl' in updates) payload.receipt_url = updates.receiptUrl ?? null;
+
   const { error } = await supabase
     .from('transactions')
-    .update({
-      type: updates.type,
-      amount: updates.amount,
-      category: updates.category,
-      description: updates.description,
-      transaction_date: updates.transaction_date,
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload as never)
     .eq('id', id)
     .eq('user_id', userId);
 

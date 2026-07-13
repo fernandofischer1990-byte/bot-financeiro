@@ -6,6 +6,8 @@ function castInvestment(row: Record<string, unknown>): Investment {
     ...row,
     initial_amount: Number(row.initial_amount ?? 0),
     metadata: (row.metadata as Record<string, unknown>) ?? {},
+    averagePrice: row.average_price != null ? Number(row.average_price) : undefined,
+    custodianCnpj: (row.custodian_cnpj as string | null | undefined) ?? undefined,
   } as Investment;
 }
 
@@ -39,6 +41,8 @@ export async function insertInvestment(userId: string, input: InvestmentInput): 
       imported_from: input.imported_from ?? 'manual',
       source_file_name: input.source_file_name ?? null,
       imported_at: input.imported_at ?? null,
+      average_price: input.averagePrice ?? null,
+      custodian_cnpj: input.custodianCnpj ?? null,
     })
     .select()
     .single();
@@ -63,6 +67,8 @@ export async function insertMultipleInvestments(userId: string, inputs: Investme
     imported_from: input.imported_from ?? 'xlsx',
     source_file_name: input.source_file_name ?? null,
     imported_at: input.imported_at ?? new Date().toISOString(),
+    average_price: input.averagePrice ?? null,
+    custodian_cnpj: input.custodianCnpj ?? null,
   }));
   const { data, error } = await supabase.from('investments').insert(rows).select();
   if (error) return { data: [], error: error.message };
@@ -70,8 +76,11 @@ export async function insertMultipleInvestments(userId: string, inputs: Investme
 }
 
 export async function updateInvestmentById(userId: string, id: string, updates: Partial<InvestmentInput>): Promise<{ error: string | null }> {
-  const payload: Record<string, unknown> = { ...updates };
+  const { averagePrice, custodianCnpj, ...rest } = updates;
+  const payload: Record<string, unknown> = { ...rest };
   if ('metadata' in payload) payload.metadata = (payload.metadata ?? {}) as never;
+  if ('averagePrice' in updates) payload.average_price = averagePrice ?? null;
+  if ('custodianCnpj' in updates) payload.custodian_cnpj = custodianCnpj ?? null;
   payload.updated_at = new Date().toISOString();
   const { error } = await supabase
     .from('investments')
