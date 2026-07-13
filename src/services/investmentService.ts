@@ -76,8 +76,11 @@ export async function insertMultipleInvestments(userId: string, inputs: Investme
 }
 
 export async function updateInvestmentById(userId: string, id: string, updates: Partial<InvestmentInput>): Promise<{ error: string | null }> {
-  const payload: Record<string, unknown> = { ...updates };
+  const { averagePrice, custodianCnpj, ...rest } = updates;
+  const payload: Record<string, unknown> = { ...rest };
   if ('metadata' in payload) payload.metadata = (payload.metadata ?? {}) as never;
+  if ('averagePrice' in updates) payload.average_price = averagePrice ?? null;
+  if ('custodianCnpj' in updates) payload.custodian_cnpj = custodianCnpj ?? null;
   payload.updated_at = new Date().toISOString();
   const { error } = await supabase
     .from('investments')
