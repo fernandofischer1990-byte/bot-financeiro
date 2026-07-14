@@ -321,10 +321,26 @@ serve(async (req) => {
     }
 
     if (context?.recentTransactions && Array.isArray(context.recentTransactions)) {
-      contextMessage += `\n\n## TRANSAÇÕES RECENTES (para referência em exclusões):`;
+      contextMessage += `\n\n## TRANSAÇÕES RECENTES (use ID exato para exclusão ou update_transaction_fiscal):`;
       for (const tx of context.recentTransactions.slice(0, 10)) {
         const typeLabel = tx.type === 'income' ? 'Receita' : tx.type === 'investment' ? 'Investimento' : 'Despesa';
-        contextMessage += `\n- ID: ${tx.id} | ${typeLabel}: R$ ${Number(tx.amount).toFixed(2)} | Categoria: ${tx.category} | Data: ${tx.date}${tx.description ? ` | Descrição: ${tx.description}` : ''}`;
+        const fiscal: string[] = [];
+        if (tx.taxId) fiscal.push(`taxId=${tx.taxId}`);
+        if (tx.irpfCategory) fiscal.push(`irpfCategory=${tx.irpfCategory}`);
+        if (tx.receiptUrl) fiscal.push(`receiptUrl=${tx.receiptUrl}`);
+        const fiscalStr = fiscal.length ? ` | Fiscal: ${fiscal.join(', ')}` : '';
+        contextMessage += `\n- ID: ${tx.id} | ${typeLabel}: R$ ${Number(tx.amount).toFixed(2)} | Categoria: ${tx.category} | Data: ${tx.date}${tx.description ? ` | Descrição: ${tx.description}` : ''}${fiscalStr}`;
+      }
+    }
+
+    if (context?.recentInvestments && Array.isArray(context.recentInvestments) && context.recentInvestments.length > 0) {
+      contextMessage += `\n\n## INVESTIMENTOS DO USUÁRIO (use ID exato para update_investment_fiscal):`;
+      for (const inv of context.recentInvestments.slice(0, 15)) {
+        const extras: string[] = [];
+        if (inv.averagePrice != null) extras.push(`averagePrice=${inv.averagePrice}`);
+        if (inv.custodianCnpj) extras.push(`custodianCnpj=${inv.custodianCnpj}`);
+        const extraStr = extras.length ? ` | ${extras.join(', ')}` : '';
+        contextMessage += `\n- ID: ${inv.id} | ${inv.name} | Tipo: ${inv.type}${inv.institution ? ` | Instituição: ${inv.institution}` : ''}${extraStr}`;
       }
     }
 
