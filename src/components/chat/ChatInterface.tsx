@@ -77,7 +77,8 @@ function cleanContentForDisplay(content: string): string {
 
 export function ChatInterface() {
   const { user } = useAuth();
-  const { transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
+  const { transactions, addTransaction, updateTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
+  const { investments, updateInvestment } = useInvestmentsContext();
   const { overallMetrics: metrics } = useFinancialMetrics();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
