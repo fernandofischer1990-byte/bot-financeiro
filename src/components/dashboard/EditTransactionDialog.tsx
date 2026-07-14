@@ -33,6 +33,10 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showFiscal, setShowFiscal] = useState(false);
+  const [taxId, setTaxId] = useState('');
+  const [irpfCategory, setIrpfCategory] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
 
   useEffect(() => {
     if (transaction) {
@@ -41,6 +45,10 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
       setCategory(transaction.category);
       setDescription(transaction.description || '');
       setDate(transaction.transaction_date);
+      setTaxId(transaction.taxId ?? '');
+      setIrpfCategory(transaction.irpfCategory ?? '');
+      setReceiptUrl(transaction.receiptUrl ?? '');
+      setShowFiscal(Boolean(transaction.taxId || transaction.irpfCategory || transaction.receiptUrl));
     }
   }, [transaction]);
 
@@ -65,6 +73,9 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
         type, amount: numAmount, category,
         description: description || null,
         transaction_date: date,
+        taxId: taxId.trim() || undefined,
+        irpfCategory: irpfCategory.trim() || undefined,
+        receiptUrl: receiptUrl.trim() || undefined,
       });
 
       const success = await Promise.race([savePromise, timeoutPromise]);
@@ -125,7 +136,36 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
             <Label htmlFor="description">Descrição</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição opcional..." rows={2} />
           </div>
+
+
+
+          <div className="border-t pt-3 grid gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFiscal(v => !v)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors text-left"
+            >
+              {showFiscal ? '▾' : '▸'} Dados fiscais (IRPF) — opcional
+            </button>
+            {showFiscal && (
+              <div className="grid gap-3 pt-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-taxId" className="text-xs">CPF/CNPJ da contraparte</Label>
+                  <Input id="edit-taxId" type="text" placeholder="000.000.000-00" value={taxId} onChange={(e) => setTaxId(e.target.value)} maxLength={20} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-irpfCategory" className="text-xs">Categoria Receita Federal</Label>
+                  <Input id="edit-irpfCategory" type="text" placeholder="Ex: Despesa Médica" value={irpfCategory} onChange={(e) => setIrpfCategory(e.target.value)} maxLength={80} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-receiptUrl" className="text-xs">URL do comprovante</Label>
+                  <Input id="edit-receiptUrl" type="url" placeholder="https://..." value={receiptUrl} onChange={(e) => setReceiptUrl(e.target.value)} maxLength={500} />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

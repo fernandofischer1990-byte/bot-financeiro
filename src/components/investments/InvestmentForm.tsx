@@ -22,6 +22,9 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
   const [initialAmount, setInitialAmount] = useState(String(initial?.initial_amount ?? ''));
   const [startDate, setStartDate] = useState(initial?.start_date ?? '');
   const [endDate, setEndDate] = useState(initial?.end_date ?? '');
+  const [averagePrice, setAveragePrice] = useState(initial?.averagePrice != null ? String(initial.averagePrice) : '');
+  const [custodianCnpj, setCustodianCnpj] = useState(initial?.custodianCnpj ?? '');
+  const [showFiscal, setShowFiscal] = useState(Boolean(initial?.averagePrice || initial?.custodianCnpj));
   const [submitting, setSubmitting] = useState(false);
 
   const parseNum = (v: string) => {
@@ -34,6 +37,7 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
     if (!name.trim() || !initialAmount) return;
     setSubmitting(true);
     const amount = parseNum(initialAmount);
+    const avgNum = averagePrice ? parseNum(averagePrice) : NaN;
     const payload = {
       investment_name: name.trim(),
       investment_type: type,
@@ -41,6 +45,8 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
       initial_amount: amount,
       start_date: startDate || null,
       end_date: endDate || null,
+      averagePrice: Number.isFinite(avgNum) && avgNum > 0 ? avgNum : undefined,
+      custodianCnpj: custodianCnpj.trim() || undefined,
     };
     let ok = false;
     if (initial) ok = await updateInvestment(initial.id, payload);
@@ -89,6 +95,29 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
               <Input id="ed" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
           </div>
+
+          <div className="border-t pt-3 space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowFiscal(v => !v)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showFiscal ? '▾' : '▸'} Dados fiscais (IRPF) — opcional
+            </button>
+            {showFiscal && (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="avgPrice" className="text-xs">Preço médio (R$)</Label>
+                  <Input id="avgPrice" type="text" inputMode="decimal" value={averagePrice} onChange={(e) => setAveragePrice(e.target.value)} placeholder="0,00" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="custodianCnpj" className="text-xs">CNPJ do custodiante</Label>
+                  <Input id="custodianCnpj" type="text" value={custodianCnpj} onChange={(e) => setCustodianCnpj(e.target.value)} placeholder="00.000.000/0000-00" maxLength={20} />
+                </div>
+              </div>
+            )}
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit" disabled={submitting}>{submitting ? 'Salvando…' : 'Salvar'}</Button>
