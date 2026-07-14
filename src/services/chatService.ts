@@ -27,6 +27,17 @@ export interface ChatContext {
     category: string;
     description: string | null;
     date: string;
+    taxId?: string;
+    irpfCategory?: string;
+    receiptUrl?: string;
+  }[];
+  recentInvestments?: {
+    id: string;
+    name: string;
+    type: string;
+    institution: string | null;
+    averagePrice?: number;
+    custodianCnpj?: string;
   }[];
   insights: string[];
   budgets: null;
