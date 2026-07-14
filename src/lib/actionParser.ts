@@ -42,12 +42,33 @@ const RequestClarificationSchema = z.object({
   }),
 });
 
+const UpdateTransactionFiscalSchema = z.object({
+  type: z.literal('update_transaction_fiscal'),
+  payload: z.object({
+    id: z.string().min(1),
+    taxId: z.string().optional().nullable(),
+    irpfCategory: z.string().optional().nullable(),
+    receiptUrl: z.string().optional().nullable(),
+  }),
+});
+
+const UpdateInvestmentFiscalSchema = z.object({
+  type: z.literal('update_investment_fiscal'),
+  payload: z.object({
+    id: z.string().min(1),
+    averagePrice: z.union([z.number(), z.string()]).optional().nullable(),
+    custodianCnpj: z.string().optional().nullable(),
+  }),
+});
+
 const ActionSchema = z.discriminatedUnion('type', [
   AddTransactionSchema,
   DeleteTransactionSchema,
   DeleteAllSchema,
   WebSearchSchema,
   RequestClarificationSchema,
+  UpdateTransactionFiscalSchema,
+  UpdateInvestmentFiscalSchema,
 ]);
 
 const AIResponseSchema = z.object({
