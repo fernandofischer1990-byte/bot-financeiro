@@ -21,6 +21,10 @@ export function TransactionForm() {
   const [investmentType, setInvestmentType] = useState<string>('cdb');
   const [institution, setInstitution] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showFiscal, setShowFiscal] = useState(false);
+  const [taxId, setTaxId] = useState('');
+  const [irpfCategory, setIrpfCategory] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
 
   const { addTransaction } = useTransactionsContext();
   const { toast } = useToast();
