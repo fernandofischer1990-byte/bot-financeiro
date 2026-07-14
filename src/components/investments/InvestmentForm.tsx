@@ -95,6 +95,29 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
               <Input id="ed" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
           </div>
+
+          <div className="border-t pt-3 space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowFiscal(v => !v)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showFiscal ? '▾' : '▸'} Dados fiscais (IRPF) — opcional
+            </button>
+            {showFiscal && (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="avgPrice" className="text-xs">Preço médio (R$)</Label>
+                  <Input id="avgPrice" type="text" inputMode="decimal" value={averagePrice} onChange={(e) => setAveragePrice(e.target.value)} placeholder="0,00" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="custodianCnpj" className="text-xs">CNPJ do custodiante</Label>
+                  <Input id="custodianCnpj" type="text" value={custodianCnpj} onChange={(e) => setCustodianCnpj(e.target.value)} placeholder="00.000.000/0000-00" maxLength={20} />
+                </div>
+              </div>
+            )}
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit" disabled={submitting}>{submitting ? 'Salvando…' : 'Salvar'}</Button>
