@@ -96,7 +96,9 @@ export type Action =
   | { type: 'delete_transaction'; payload: { id: string } }
   | { type: 'delete_all_transactions'; payload: { filter: 'all' | 'income' | 'expense' } }
   | { type: 'web_search'; payload: { query: string } }
-  | { type: 'request_clarification'; payload: { intent: string; partial?: Record<string, unknown>; missing_field?: string } };
+  | { type: 'request_clarification'; payload: { intent: string; partial?: Record<string, unknown>; missing_field?: string } }
+  | { type: 'update_transaction_fiscal'; payload: { id: string; taxId?: string; irpfCategory?: string; receiptUrl?: string } }
+  | { type: 'update_investment_fiscal'; payload: { id: string; averagePrice?: number; custodianCnpj?: string } };
 
 export interface ParsedAIResponse {
   message: string;
