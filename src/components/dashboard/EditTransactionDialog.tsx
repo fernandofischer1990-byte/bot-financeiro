@@ -33,6 +33,10 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showFiscal, setShowFiscal] = useState(false);
+  const [taxId, setTaxId] = useState('');
+  const [irpfCategory, setIrpfCategory] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
 
   useEffect(() => {
     if (transaction) {
@@ -41,6 +45,10 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
       setCategory(transaction.category);
       setDescription(transaction.description || '');
       setDate(transaction.transaction_date);
+      setTaxId(transaction.taxId ?? '');
+      setIrpfCategory(transaction.irpfCategory ?? '');
+      setReceiptUrl(transaction.receiptUrl ?? '');
+      setShowFiscal(Boolean(transaction.taxId || transaction.irpfCategory || transaction.receiptUrl));
     }
   }, [transaction]);
 
