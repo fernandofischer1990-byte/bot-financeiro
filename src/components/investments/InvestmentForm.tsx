@@ -22,6 +22,9 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
   const [initialAmount, setInitialAmount] = useState(String(initial?.initial_amount ?? ''));
   const [startDate, setStartDate] = useState(initial?.start_date ?? '');
   const [endDate, setEndDate] = useState(initial?.end_date ?? '');
+  const [averagePrice, setAveragePrice] = useState(initial?.averagePrice != null ? String(initial.averagePrice) : '');
+  const [custodianCnpj, setCustodianCnpj] = useState(initial?.custodianCnpj ?? '');
+  const [showFiscal, setShowFiscal] = useState(Boolean(initial?.averagePrice || initial?.custodianCnpj));
   const [submitting, setSubmitting] = useState(false);
 
   const parseNum = (v: string) => {
