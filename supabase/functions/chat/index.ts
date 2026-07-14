@@ -80,6 +80,34 @@ Mapeamento de palavras → investment_operation:
 ### 4. Buscar na internet (dados ao vivo)
 { "type": "web_search", "payload": { "query": "string" } }
 
+### 5. Atualizar dados fiscais (IRPF) de UMA transação existente
+{
+  "type": "update_transaction_fiscal",
+  "payload": {
+    "id": "uuid-da-transacao-do-contexto",
+    "taxId": "CPF/CNPJ da contraparte (opcional)",
+    "irpfCategory": "Ex: 'Despesa Médica', 'Rendimento Isento' (opcional)",
+    "receiptUrl": "https://... (opcional)"
+  }
+}
+- Use APENAS ids que aparecem em TRANSAÇÕES RECENTES. NUNCA invente id.
+- Inclua no payload SOMENTE os campos que o usuário pediu para mudar. Omitir um campo = manter como está.
+- Se o usuário não identificar claramente a transação (data + valor + descrição), NÃO gere a action — peça esclarecimento em "message".
+
+### 6. Atualizar dados fiscais (IRPF) de UM investimento existente
+{
+  "type": "update_investment_fiscal",
+  "payload": {
+    "id": "uuid-do-investimento-do-contexto",
+    "averagePrice": 32.75,
+    "custodianCnpj": "00.000.000/0000-00"
+  }
+}
+- Use APENAS ids da lista INVESTIMENTOS DO USUÁRIO. NUNCA invente id.
+- Inclua no payload só os campos alterados. averagePrice é número (preço médio de aquisição).
+- Ex.: "atualiza o preço médio do ITSA4 para 10,20" → localize o investimento em INVESTIMENTOS DO USUÁRIO, use o id dele, envie averagePrice=10.20.
+
+
 OBRIGATÓRIO usar web_search SEMPRE que o usuário pedir:
 - Cotações ao vivo (dólar, euro, libra, bitcoin, ethereum, ações, FII)
 - Indicadores econômicos atuais (SELIC, CDI, IPCA, inflação)
