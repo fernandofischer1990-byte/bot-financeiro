@@ -8,6 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
+import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown } from 'lucide-react';
@@ -77,7 +78,8 @@ function cleanContentForDisplay(content: string): string {
 
 export function ChatInterface() {
   const { user } = useAuth();
-  const { transactions, addTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
+  const { transactions, addTransaction, updateTransaction, deleteTransaction, deleteAllTransactions } = useTransactionsContext();
+  const { investments, updateInvestment } = useInvestmentsContext();
   const { overallMetrics: metrics } = useFinancialMetrics();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -132,7 +134,20 @@ export function ChatInterface() {
       category: t.category,
       description: t.description,
       date: t.transaction_date,
+      taxId: t.taxId,
+      irpfCategory: t.irpfCategory,
+      receiptUrl: t.receiptUrl,
     })), [periodTransactions]);
+
+  const recentInvestments = useMemo(() =>
+    investments.slice(0, 15).map(inv => ({
+      id: inv.id,
+      name: inv.investment_name,
+      type: inv.investment_type,
+      institution: inv.institution,
+      averagePrice: inv.averagePrice,
+      custodianCnpj: inv.custodianCnpj,
+    })), [investments]);
 
   const topSpendingCategories = useMemo(() => {
     const byCategory: Record<string, number> = {};
@@ -162,12 +177,13 @@ export function ChatInterface() {
     top_categories: topCategories,
     top_spending_categories: topSpendingCategories,
     recentTransactions,
+    recentInvestments,
     insights: spendingInsights,
     budgets: null,
     period_label: periodRange.label,
     period_start: periodRange.start ? format(periodRange.start, 'yyyy-MM-dd') : null,
     period_end: periodRange.end ? format(periodRange.end, 'yyyy-MM-dd') : null,
-  }), [chatPeriod, metrics, periodTotals, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, spendingInsights, periodRange]);
+  }), [chatPeriod, metrics, periodTotals, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, recentInvestments, spendingInsights, periodRange]);
 
   const handleChatPeriodChange = (period: PeriodKey) => {
     if (period === 'custom') {
@@ -326,8 +342,36 @@ export function ChatInterface() {
       case 'request_clarification':
         setActiveIntent(action.payload);
         break;
+      case 'update_transaction_fiscal': {
+        const tx = transactions.find(t => t.id === action.payload.id);
+        if (!tx) {
+          toast({ title: 'Transação não encontrada', description: `ID ${action.payload.id}`, variant: 'destructive' });
+          break;
+        }
+        const { id, ...fields } = action.payload;
+        const ok = await updateTransaction(id, fields);
+        if (ok) {
+          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
+          toast({ title: '🧾 Dados fiscais atualizados', description: changed });
+        }
+        break;
+      }
+      case 'update_investment_fiscal': {
+        const inv = investments.find(i => i.id === action.payload.id);
+        if (!inv) {
+          toast({ title: 'Investimento não encontrado', description: `ID ${action.payload.id}`, variant: 'destructive' });
+          break;
+        }
+        const { id, ...fields } = action.payload;
+        const ok = await updateInvestment(id, fields);
+        if (ok) {
+          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
+          toast({ title: '🧾 Dados fiscais do investimento atualizados', description: changed });
+        }
+        break;
+      }
     }
-  }, [transactions, deleteTransaction, toast, runWebSearch]);
+  }, [transactions, investments, updateTransaction, updateInvestment, deleteTransaction, toast, runWebSearch]);
 
   const updatePending = (idx: number, patch: Partial<AddTxPayload>) => {
     setPendingAdds(prev => prev.map((p, i) => i === idx ? { ...p, edited: { ...p.edited, ...patch } } : p));

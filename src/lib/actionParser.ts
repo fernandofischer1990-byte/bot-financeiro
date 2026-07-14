@@ -42,12 +42,33 @@ const RequestClarificationSchema = z.object({
   }),
 });
 
+const UpdateTransactionFiscalSchema = z.object({
+  type: z.literal('update_transaction_fiscal'),
+  payload: z.object({
+    id: z.string().min(1),
+    taxId: z.string().optional().nullable(),
+    irpfCategory: z.string().optional().nullable(),
+    receiptUrl: z.string().optional().nullable(),
+  }),
+});
+
+const UpdateInvestmentFiscalSchema = z.object({
+  type: z.literal('update_investment_fiscal'),
+  payload: z.object({
+    id: z.string().min(1),
+    averagePrice: z.union([z.number(), z.string()]).optional().nullable(),
+    custodianCnpj: z.string().optional().nullable(),
+  }),
+});
+
 const ActionSchema = z.discriminatedUnion('type', [
   AddTransactionSchema,
   DeleteTransactionSchema,
   DeleteAllSchema,
   WebSearchSchema,
   RequestClarificationSchema,
+  UpdateTransactionFiscalSchema,
+  UpdateInvestmentFiscalSchema,
 ]);
 
 const AIResponseSchema = z.object({
@@ -75,7 +96,9 @@ export type Action =
   | { type: 'delete_transaction'; payload: { id: string } }
   | { type: 'delete_all_transactions'; payload: { filter: 'all' | 'income' | 'expense' } }
   | { type: 'web_search'; payload: { query: string } }
-  | { type: 'request_clarification'; payload: { intent: string; partial?: Record<string, unknown>; missing_field?: string } };
+  | { type: 'request_clarification'; payload: { intent: string; partial?: Record<string, unknown>; missing_field?: string } }
+  | { type: 'update_transaction_fiscal'; payload: { id: string; taxId?: string; irpfCategory?: string; receiptUrl?: string } }
+  | { type: 'update_investment_fiscal'; payload: { id: string; averagePrice?: number; custodianCnpj?: string } };
 
 export interface ParsedAIResponse {
   message: string;
@@ -152,6 +175,29 @@ function normalizeAction(raw: unknown): Action | null {
       return { type: 'web_search', payload: { query: a.payload.query.trim() } };
     case 'request_clarification':
       return { type: 'request_clarification', payload: { intent: a.payload.intent || 'unknown', partial: a.payload.partial, missing_field: a.payload.missing_field } };
+    case 'update_transaction_fiscal': {
+      const p = a.payload;
+      const clean = (v: unknown) => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined);
+      const out: { id: string; taxId?: string; irpfCategory?: string; receiptUrl?: string } = { id: p.id };
+      if (p.taxId !== undefined) out.taxId = clean(p.taxId);
+      if (p.irpfCategory !== undefined) out.irpfCategory = clean(p.irpfCategory);
+      if (p.receiptUrl !== undefined) out.receiptUrl = clean(p.receiptUrl);
+      if (out.taxId === undefined && out.irpfCategory === undefined && out.receiptUrl === undefined) return null;
+      return { type: 'update_transaction_fiscal', payload: out };
+    }
+    case 'update_investment_fiscal': {
+      const p = a.payload;
+      const out: { id: string; averagePrice?: number; custodianCnpj?: string } = { id: p.id };
+      if (p.averagePrice !== undefined && p.averagePrice !== null) {
+        const n = normalizeAmount(p.averagePrice);
+        if (n !== null && n > 0) out.averagePrice = n;
+      }
+      if (typeof p.custodianCnpj === 'string' && p.custodianCnpj.trim().length > 0) {
+        out.custodianCnpj = p.custodianCnpj.trim();
+      }
+      if (out.averagePrice === undefined && out.custodianCnpj === undefined) return null;
+      return { type: 'update_investment_fiscal', payload: out };
+    }
   }
 }
 
