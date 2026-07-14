@@ -342,8 +342,36 @@ export function ChatInterface() {
       case 'request_clarification':
         setActiveIntent(action.payload);
         break;
+      case 'update_transaction_fiscal': {
+        const tx = transactions.find(t => t.id === action.payload.id);
+        if (!tx) {
+          toast({ title: 'Transação não encontrada', description: `ID ${action.payload.id}`, variant: 'destructive' });
+          break;
+        }
+        const { id, ...fields } = action.payload;
+        const ok = await updateTransaction(id, fields);
+        if (ok) {
+          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
+          toast({ title: '🧾 Dados fiscais atualizados', description: changed });
+        }
+        break;
+      }
+      case 'update_investment_fiscal': {
+        const inv = investments.find(i => i.id === action.payload.id);
+        if (!inv) {
+          toast({ title: 'Investimento não encontrado', description: `ID ${action.payload.id}`, variant: 'destructive' });
+          break;
+        }
+        const { id, ...fields } = action.payload;
+        const ok = await updateInvestment(id, fields);
+        if (ok) {
+          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
+          toast({ title: '🧾 Dados fiscais do investimento atualizados', description: changed });
+        }
+        break;
+      }
     }
-  }, [transactions, deleteTransaction, toast, runWebSearch]);
+  }, [transactions, investments, updateTransaction, updateInvestment, deleteTransaction, toast, runWebSearch]);
 
   const updatePending = (idx: number, patch: Partial<AddTxPayload>) => {
     setPendingAdds(prev => prev.map((p, i) => i === idx ? { ...p, edited: { ...p.edited, ...patch } } : p));
