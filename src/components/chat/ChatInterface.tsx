@@ -177,12 +177,13 @@ export function ChatInterface() {
     top_categories: topCategories,
     top_spending_categories: topSpendingCategories,
     recentTransactions,
+    recentInvestments,
     insights: spendingInsights,
     budgets: null,
     period_label: periodRange.label,
     period_start: periodRange.start ? format(periodRange.start, 'yyyy-MM-dd') : null,
     period_end: periodRange.end ? format(periodRange.end, 'yyyy-MM-dd') : null,
-  }), [chatPeriod, metrics, periodTotals, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, spendingInsights, periodRange]);
+  }), [chatPeriod, metrics, periodTotals, monthlyMetrics, savingsRate, healthScore, topCategories, topSpendingCategories, recentTransactions, recentInvestments, spendingInsights, periodRange]);
 
   const handleChatPeriodChange = (period: PeriodKey) => {
     if (period === 'custom') {
