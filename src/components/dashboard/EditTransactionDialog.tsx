@@ -135,6 +135,9 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
           <div className="grid gap-2">
             <Label htmlFor="description">Descrição</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição opcional..." rows={2} />
+          </div>
+
+
 
           <div className="border-t pt-3 grid gap-2">
             <button
