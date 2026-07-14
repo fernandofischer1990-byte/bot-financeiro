@@ -175,6 +175,29 @@ function normalizeAction(raw: unknown): Action | null {
       return { type: 'web_search', payload: { query: a.payload.query.trim() } };
     case 'request_clarification':
       return { type: 'request_clarification', payload: { intent: a.payload.intent || 'unknown', partial: a.payload.partial, missing_field: a.payload.missing_field } };
+    case 'update_transaction_fiscal': {
+      const p = a.payload;
+      const clean = (v: unknown) => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined);
+      const out: { id: string; taxId?: string; irpfCategory?: string; receiptUrl?: string } = { id: p.id };
+      if (p.taxId !== undefined) out.taxId = clean(p.taxId);
+      if (p.irpfCategory !== undefined) out.irpfCategory = clean(p.irpfCategory);
+      if (p.receiptUrl !== undefined) out.receiptUrl = clean(p.receiptUrl);
+      if (out.taxId === undefined && out.irpfCategory === undefined && out.receiptUrl === undefined) return null;
+      return { type: 'update_transaction_fiscal', payload: out };
+    }
+    case 'update_investment_fiscal': {
+      const p = a.payload;
+      const out: { id: string; averagePrice?: number; custodianCnpj?: string } = { id: p.id };
+      if (p.averagePrice !== undefined && p.averagePrice !== null) {
+        const n = normalizeAmount(p.averagePrice);
+        if (n !== null && n > 0) out.averagePrice = n;
+      }
+      if (typeof p.custodianCnpj === 'string' && p.custodianCnpj.trim().length > 0) {
+        out.custodianCnpj = p.custodianCnpj.trim();
+      }
+      if (out.averagePrice === undefined && out.custodianCnpj === undefined) return null;
+      return { type: 'update_investment_fiscal', payload: out };
+    }
   }
 }
 
