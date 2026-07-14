@@ -135,8 +135,34 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
           <div className="grid gap-2">
             <Label htmlFor="description">Descrição</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição opcional..." rows={2} />
+
+          <div className="border-t pt-3 grid gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFiscal(v => !v)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors text-left"
+            >
+              {showFiscal ? '▾' : '▸'} Dados fiscais (IRPF) — opcional
+            </button>
+            {showFiscal && (
+              <div className="grid gap-3 pt-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-taxId" className="text-xs">CPF/CNPJ da contraparte</Label>
+                  <Input id="edit-taxId" type="text" placeholder="000.000.000-00" value={taxId} onChange={(e) => setTaxId(e.target.value)} maxLength={20} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-irpfCategory" className="text-xs">Categoria Receita Federal</Label>
+                  <Input id="edit-irpfCategory" type="text" placeholder="Ex: Despesa Médica" value={irpfCategory} onChange={(e) => setIrpfCategory(e.target.value)} maxLength={80} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-receiptUrl" className="text-xs">URL do comprovante</Label>
+                  <Input id="edit-receiptUrl" type="url" placeholder="https://..." value={receiptUrl} onChange={(e) => setReceiptUrl(e.target.value)} maxLength={500} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
