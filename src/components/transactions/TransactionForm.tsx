@@ -152,6 +152,33 @@ export function TransactionForm() {
             <Input id="description" type="text" placeholder={type === 'investment' ? 'Ex: CDB Nubank 110% CDI' : 'Ex: Almoço no restaurante'} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
+          <div className="border-t pt-3 space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowFiscal(v => !v)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showFiscal ? '▾' : '▸'} Dados fiscais (IRPF) — opcional
+            </button>
+            {showFiscal && (
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="taxId" className="text-xs">CPF/CNPJ da contraparte</Label>
+                  <Input id="taxId" type="text" placeholder="000.000.000-00" value={taxId} onChange={(e) => setTaxId(e.target.value)} maxLength={20} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="irpfCategory" className="text-xs">Categoria Receita Federal</Label>
+                  <Input id="irpfCategory" type="text" placeholder="Ex: Despesa Médica, Rendimento Isento" value={irpfCategory} onChange={(e) => setIrpfCategory(e.target.value)} maxLength={80} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="receiptUrl" className="text-xs">URL do comprovante</Label>
+                  <Input id="receiptUrl" type="url" placeholder="https://..." value={receiptUrl} onChange={(e) => setReceiptUrl(e.target.value)} maxLength={500} />
+                </div>
+              </div>
+            )}
+          </div>
+
+
           <Button type="submit" className="w-full" disabled={loading || !canSubmit}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
             Adicionar
