@@ -37,6 +37,7 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
     if (!name.trim() || !initialAmount) return;
     setSubmitting(true);
     const amount = parseNum(initialAmount);
+    const avgNum = averagePrice ? parseNum(averagePrice) : NaN;
     const payload = {
       investment_name: name.trim(),
       investment_type: type,
@@ -44,6 +45,8 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
       initial_amount: amount,
       start_date: startDate || null,
       end_date: endDate || null,
+      averagePrice: Number.isFinite(avgNum) && avgNum > 0 ? avgNum : undefined,
+      custodianCnpj: custodianCnpj.trim() || undefined,
     };
     let ok = false;
     if (initial) ok = await updateInvestment(initial.id, payload);
