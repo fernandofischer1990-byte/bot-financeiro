@@ -73,6 +73,9 @@ export function EditTransactionDialog({ transaction, open, onOpenChange, onSave 
         type, amount: numAmount, category,
         description: description || null,
         transaction_date: date,
+        taxId: taxId.trim() || undefined,
+        irpfCategory: irpfCategory.trim() || undefined,
+        receiptUrl: receiptUrl.trim() || undefined,
       });
 
       const success = await Promise.race([savePromise, timeoutPromise]);
