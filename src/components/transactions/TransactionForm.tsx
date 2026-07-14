@@ -56,6 +56,9 @@ export function TransactionForm() {
       investment_operation: type === 'investment' ? investmentOperation : undefined,
       investment_type: type === 'investment' ? investmentType : undefined,
       institution: type === 'investment' ? (institution || undefined) : undefined,
+      taxId: taxId.trim() || undefined,
+      irpfCategory: irpfCategory.trim() || undefined,
+      receiptUrl: receiptUrl.trim() || undefined,
     });
     setLoading(false);
 
@@ -70,6 +73,9 @@ export function TransactionForm() {
       setCategory('');
       setDescription('');
       setInstitution('');
+      setTaxId('');
+      setIrpfCategory('');
+      setReceiptUrl('');
     }
   };
 
