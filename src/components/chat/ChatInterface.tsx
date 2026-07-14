@@ -134,7 +134,20 @@ export function ChatInterface() {
       category: t.category,
       description: t.description,
       date: t.transaction_date,
+      taxId: t.taxId,
+      irpfCategory: t.irpfCategory,
+      receiptUrl: t.receiptUrl,
     })), [periodTransactions]);
+
+  const recentInvestments = useMemo(() =>
+    investments.slice(0, 15).map(inv => ({
+      id: inv.id,
+      name: inv.investment_name,
+      type: inv.investment_type,
+      institution: inv.institution,
+      averagePrice: inv.averagePrice,
+      custodianCnpj: inv.custodianCnpj,
+    })), [investments]);
 
   const topSpendingCategories = useMemo(() => {
     const byCategory: Record<string, number> = {};
