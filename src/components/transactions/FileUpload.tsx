@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { friendlyImportError } from '@/lib/importErrors';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransactionsContext, TransactionInput } from '@/contexts/TransactionsContext';
@@ -57,7 +58,7 @@ export function FileUpload() {
         setParsedData(rows);
         setStep('preview');
       } catch (error) {
-        toast({ title: 'Erro ao ler arquivo', description: 'Verifique se o arquivo está no formato correto', variant: 'destructive' });
+        toast({ title: 'Erro ao ler arquivo', description: friendlyImportError(error), variant: 'destructive' });
         resetState();
       }
     } else {

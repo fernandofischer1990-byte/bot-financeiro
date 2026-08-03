@@ -18,6 +18,7 @@ import { NormalizedTransactionRow, normalizeTransactionRow, normalizeAmount, nor
 import { normalizeToLocalDate } from '@/lib/dateUtils';
 import { parseOFX } from '@/lib/ofxParser';
 import { parseQIF } from '@/lib/qifParser';
+import { friendlyImportError } from '@/lib/importErrors';
 import { parseStatementPDF } from '@/services/fileParsingService';
 import { detectDuplicates, ImportRow, getDuplicateCounts } from '@/lib/duplicateDetector';
 import { cleanDescription } from '@/lib/descriptionCleaner';
@@ -295,7 +296,7 @@ export function ImportWizard() {
           setStep('mapping');
         }
       } catch (error) {
-        toast({ title: 'Erro ao ler arquivo', description: error instanceof Error ? error.message : 'Formato inválido', variant: 'destructive' });
+        toast({ title: 'Erro ao ler arquivo', description: friendlyImportError(error), variant: 'destructive' });
         reset();
       }
       return;
