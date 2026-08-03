@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, MessageSquare, Plus, Upload, FileBarChart, Wallet } from 'lucide-react';
+import { LayoutDashboard, Briefcase, MessageSquare, Plus, Upload, FileBarChart, Wallet, History } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +26,7 @@ export const NAV_ITEMS: NavSection[] = [
   { value: 'add', label: 'Adicionar', icon: Plus },
   { value: 'import', label: 'Importar', icon: Upload },
   { value: 'reports', label: 'Relatórios', icon: FileBarChart },
+  { value: 'history', label: 'Histórico', icon: History },
 ];
 
 interface AppSidebarProps {
