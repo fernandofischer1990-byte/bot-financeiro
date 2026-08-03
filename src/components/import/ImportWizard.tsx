@@ -18,6 +18,7 @@ import { NormalizedTransactionRow, normalizeTransactionRow, normalizeAmount, nor
 import { normalizeToLocalDate } from '@/lib/dateUtils';
 import { parseOFX } from '@/lib/ofxParser';
 import { parseQIF } from '@/lib/qifParser';
+import { friendlyImportError } from '@/lib/importErrors';
 import { parseStatementPDF } from '@/services/fileParsingService';
 import { detectDuplicates, ImportRow, getDuplicateCounts } from '@/lib/duplicateDetector';
 import { cleanDescription } from '@/lib/descriptionCleaner';

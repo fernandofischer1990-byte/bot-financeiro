@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { parseInvestmentSpreadsheet, ParsedInvestmentRow } from '@/lib/investmentSpreadsheetParser';
 import { formatCurrency, getInvestmentTypeLabel } from '@/lib/constants';
+import { friendlyImportError } from '@/lib/importErrors';
 
 type Step = 'upload' | 'parsing' | 'review' | 'saving' | 'done';
 
@@ -52,7 +53,7 @@ export function InvestmentImportWizard({ open, onOpenChange }: Props) {
       setStep('review');
     } catch (e) {
       console.error('[InvestmentImport] parse error', e);
-      toast({ title: 'Erro ao ler arquivo', description: e instanceof Error ? e.message : 'Falha desconhecida', variant: 'destructive' });
+      toast({ title: 'Erro ao ler arquivo', description: friendlyImportError(e), variant: 'destructive' });
       setStep('upload');
     }
   };
