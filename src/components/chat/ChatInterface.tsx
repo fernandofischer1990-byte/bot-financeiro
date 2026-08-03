@@ -448,6 +448,7 @@ export function ChatInterface() {
     const userMessage = input.trim();
     setInput('');
     await addMessage('user', userMessage);
+    if (user) void trackEvent(user.id, 'chat_message_sent', { length: userMessage.length });
     setIsStreaming(true);
     setStreamingContent('');
 
