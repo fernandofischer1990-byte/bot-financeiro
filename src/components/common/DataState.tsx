@@ -1,6 +1,6 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, Inbox } from 'lucide-react';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import type { LucideIcon } from 'lucide-react';
 
