@@ -18,6 +18,7 @@ import { extractPartialMessage } from '@/lib/streamingMessage';
 import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
 import { saveSingleLearnedMapping } from '@/services/categoryMappingService';
 import { useAuth } from '@/hooks/useAuth';
+import { trackEvent } from '@/services/analyticsService';
 import { MessageBubble } from './MessageBubble';
 import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
 import { parseDateOnly, getLocalISODate } from '@/lib/dateUtils';
