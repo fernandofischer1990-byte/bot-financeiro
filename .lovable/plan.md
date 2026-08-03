@@ -1,85 +1,53 @@
-## Objetivo
-Enriquecer os contratos de dados (`Transaction`, `Investment`) com metadados fiscais opcionais e criar a interface `IrpfReport`, preparando a fundação para o épico de Relatório Anual de IRPF sem quebrar nenhum componente atual.
+# Benchmarking do PRD "Corrida pela Saúde" aplicado ao FinBot
 
-Todos os novos campos são **opcionais** (`?`), portanto totalmente retrocompatíveis: nenhum construtor, serviço, formulário ou consumidor existente precisa mudar. Nenhuma migração de banco será feita agora — este passo é apenas de tipagem no frontend.
+O PRD é de outro produto (ação promocional gamificada com QR Codes, stands, staff e ranking). Nada da sua identidade, telas, nomenclaturas ou regras entra no FinBot. O que ele traz de valioso são **práticas transversais de produto**: auditoria completa, configurações administráveis, analytics de funil, padronização de mensagens, estados de carregamento, orçamentos de performance e RBAC.
 
-## Arquivos a alterar / criar
+## Estado atual verificado
 
-### 1. `src/contexts/TransactionsContext.tsx` — estender `Transaction` e `TransactionInput`
-Adicionar ao final da interface `Transaction` (linhas 21–36) e espelhar em `TransactionInput` (linhas 38–49):
+- Tabelas existentes: `transactions`, `investments`, `profiles`, `chat_messages`, `category_mappings`, `import_history`, `mapping_templates`, `analytics_events`.
+- `analytics_events` existe no banco mas **não é usada por nenhum código do app** (nenhuma referência em `src/`).
+- Não existe tabela de auditoria (antes/depois) nem tabela de preferências do usuário.
+- Feedback ao usuário é feito com `toast(...)` espalhado em ~10 arquivos, com textos ad-hoc; só a importação tem tradutor de erros (`src/lib/importErrors.ts`).
+- Skeletons/erros/vazios estão implementados caso a caso (`Dashboard.tsx`, `EmptyState.tsx`, `InvestmentsTab.tsx`), sem componente comum.
+- A meta de taxa de poupança (20%) está fixa em código (`Dashboard.tsx`, `InsightsPanel`).
 
-```ts
-// Metadados fiscais (IRPF) — opcionais, populados sob demanda
-taxId?: string;              // CPF/CNPJ da contraparte
-irpfCategory?: string;       // Código Receita: "Despesa Médica", "Rendimento Isento" etc.
-receiptUrl?: string;         // URL do comprovante (malha fina)
-```
+## Oportunidades classificadas
 
-### 2. `src/types/investment.ts` — estender `Investment` e `InvestmentInput`
-Adicionar aos dois blocos:
+### Alta prioridade (implementar agora — aditivo, sem mudar lógica financeira)
 
-```ts
-averagePrice?: number;       // Custo médio de aquisição (Bens e Direitos)
-custodianCnpj?: string;      // CNPJ da corretora/custodiante
-```
+1. **Histórico de atividades / auditoria** (PRD RF-029/RF-030)
+   Hoje não há como o usuário saber "quem/quando/o que mudou" numa transação — especialmente com três origens de escrita (manual, importação, chat/MCP). Nova tabela `activity_log` própria do usuário (RLS estrita, só leitura para o dono) registrando ação, entidade, id, origem e snapshot antes/depois. Nova aba "Histórico" com filtros por período, entidade e ação.
 
-### 3. `src/types/irpf.ts` — novo arquivo
-Criar interface `IrpfReport` estruturando a saída do futuro motor de cálculo. Cada grupo carrega `calendarYear` e `total`, mais uma lista de itens detalhados (também tipados) para permitir drill-down futuro:
+2. **Camada padronizada de feedback** (PRD RF-031, seção 50 de erros)
+   Catálogo único de mensagens PT-BR + tradutor de erros técnicos (generalizando o que já existe para importação) para que erros de rede/RLS/validação nunca cheguem crus ao usuário. Adotado nos pontos de escrita existentes, sem alterar fluxos.
 
-```ts
-export interface IrpfReportGroup<TItem> {
-  calendarYear: number;
-  total: number;
-  items: TItem[];
-}
+3. **Instrumentação de analytics de jornada** (PRD RF-027)
+   Passar a usar a tabela `analytics_events` já provisionada: eventos de cadastro concluído, primeira transação, importação concluída, uso do chat, investimento cadastrado. Habilita medir conversão por etapa sem nenhuma mudança de UX.
 
-export interface BemDireitoItem {
-  code: string;              // ex: "31" Ações, "41" Poupança
-  description: string;
-  taxId?: string;             // CNPJ do custodiante
-  situacaoAnterior: number;   // saldo em 31/12 do ano-1
-  situacaoAtual: number;      // saldo em 31/12 do ano-calendário
-}
+4. **Padronização de estados (carregando / erro / vazio)**
+   Um componente comum reutilizado nos módulos, mantendo exatamente o visual Midnight Indigo atual — reduz duplicação e garante que todo módulo tenha os três estados.
 
-export interface RendimentoIsentoItem {
-  code: string;              // ex: "12" Rendimentos poupança
-  sourceName: string;
-  sourceTaxId?: string;
-  amount: number;
-}
+### Média prioridade (proposto, não implementado nesta rodada)
 
-export interface RendimentoTributavelItem {
-  sourceName: string;
-  sourceTaxId?: string;
-  amount: number;
-  withheldTax: number;
-}
+5. **Configurações administráveis do usuário** (PRD RF-026): meta de taxa de poupança, moeda de exibição, alerta de despesa relevante — hoje constantes no código.
+6. **Relatórios ampliados** (RF-028/RF-032): exportar auditoria e investimentos, além do CSV atual.
+7. **Performance e escala** (seções 51/52): paginação/virtualização da lista de transações e orçamentos de tempo por tela.
+8. **Rate limiting nas edge functions** de chat e web-search (PRD seção 46).
 
-export interface PagamentoEfetuadoItem {
-  code: string;              // ex: "10" Médicos
-  beneficiaryName: string;
-  beneficiaryTaxId?: string;
-  amount: number;
-  reimbursed?: number;
-}
+### Baixa prioridade / não aplicável
 
-export interface IrpfReport {
-  calendarYear: number;
-  generatedAt: string;       // ISO
-  bensEDireitos: IrpfReportGroup<BemDireitoItem>;
-  rendimentosIsentos: IrpfReportGroup<RendimentoIsentoItem>;
-  rendimentosTributaveis: IrpfReportGroup<RendimentoTributavelItem>;
-  pagamentosEfetuados: IrpfReportGroup<PagamentoEfetuadoItem>;
-}
-```
+9. **RBAC com papéis Admin/Staff/Operador** (PRD seção 45): o FinBot é multi-tenant por usuário, sem operação de bastidores — só faz sentido se houver painel administrativo real no futuro.
+10. **Notificações e webhooks** (RF-031, seção 101): sem canal externo definido, agrega pouco hoje.
+11. **QR Code, stands, ranking, elegibilidade, benefícios**: exclusivos do PRD, descartados.
 
-## Verificação de retrocompatibilidade
-- Todos os novos campos em `Transaction`/`TransactionInput`/`Investment`/`InvestmentInput` são opcionais → nenhum `insert…`, form, cast (`castTransaction`, `castInvestment`) ou consumidor de dashboard precisa ser modificado.
-- Nenhuma alteração no schema do banco nesta etapa; PostgREST continua devolvendo as mesmas colunas e os novos campos ficarão simplesmente `undefined` até o épico seguinte adicionar colunas e mapeamento.
-- `IrpfReport` é um tipo novo isolado, sem imports em código existente.
-- Após aplicar, rodar `tsgo` para confirmar zero erros de tipo.
+## Detalhes técnicos da implementação (itens 1 a 4)
 
-## Fora de escopo (próximos passos do épico)
-- Migração SQL para persistir `tax_id`, `irpf_category`, `receipt_url`, `average_price`, `custodian_cnpj`.
-- Motor de cálculo que popula `IrpfReport`.
-- UI de captura destes metadados e tela de relatório.
+- Migração: `public.activity_log` (`id`, `user_id`, `action`, `entity`, `entity_id`, `source`, `before jsonb`, `after jsonb`, `created_at`), índice por `(user_id, created_at desc)`, `GRANT SELECT, INSERT` para `authenticated`, `GRANT ALL` para `service_role`, RLS com `SELECT`/`INSERT`/`DELETE` restritos a `auth.uid() = user_id`.
+- `src/services/activityLogService.ts` — gravação best-effort (falha de log nunca quebra a operação financeira) e consulta com filtros.
+- Ganchos de registro nos serviços já existentes de transações e investimentos, sem alterar suas assinaturas nem os cálculos de `metricsCalculator.ts`.
+- `src/lib/feedback.ts` — catálogo de mensagens + `translateError()` reaproveitando `importErrors.ts`.
+- `src/services/analyticsService.ts` — `track(event, properties)` gravando em `analytics_events`, chamado nos pontos de jornada.
+- `src/components/common/DataState.tsx` — estados skeleton/erro/vazio com os tokens semânticos atuais.
+- Nova aba "Histórico" registrada em `NAV_ITEMS` (`AppSidebar`/`BottomNav`) e renderizada em `Index.tsx`.
+
+Nenhuma regra financeira, fórmula de saldo, escopo `operational`/`investment` ou identidade visual é alterada.
