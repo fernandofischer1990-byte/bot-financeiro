@@ -110,6 +110,12 @@ function sortByDateDesc(txs: Transaction[]): Transaction[] {
   );
 }
 
+function describeTransaction(tx: Transaction): string {
+  const value = Number(tx.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const kind = tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Investimento';
+  return `${kind} · ${value} · ${tx.description || tx.category}`;
+}
+
 export function TransactionsProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
