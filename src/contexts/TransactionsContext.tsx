@@ -5,6 +5,9 @@ import { FilterState } from '@/components/dashboard/DashboardFilters';
 import { parseDateOnly } from '@/lib/dateUtils';
 import { calculateMetrics } from '@/lib/metricsCalculator';
 import { supabase } from '@/integrations/supabase/client';
+import { translateError, MESSAGES } from '@/lib/feedback';
+import { logActivity, type ActivitySource } from '@/services/activityLogService';
+import { trackEvent } from '@/services/analyticsService';
 import {
   fetchUserTransactions,
   insertTransaction,
