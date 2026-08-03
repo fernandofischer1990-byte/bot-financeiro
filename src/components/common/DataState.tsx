@@ -62,7 +62,7 @@ export function DataState({
   if (isEmpty) {
     return (
       <EmptyState
-        icon={emptyIcon as never}
+        icon={emptyIcon ?? Inbox}
         title={emptyTitle}
         description={emptyDescription}
         actions={emptyActions}
