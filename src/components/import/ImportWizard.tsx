@@ -295,7 +295,7 @@ export function ImportWizard() {
           setStep('mapping');
         }
       } catch (error) {
-        toast({ title: 'Erro ao ler arquivo', description: error instanceof Error ? error.message : 'Formato inválido', variant: 'destructive' });
+        toast({ title: 'Erro ao ler arquivo', description: friendlyImportError(error), variant: 'destructive' });
         reset();
       }
       return;
