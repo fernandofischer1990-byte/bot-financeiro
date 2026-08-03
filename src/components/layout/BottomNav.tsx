@@ -8,7 +8,7 @@ interface BottomNavProps {
 
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   // Mobile shows 5 most important items
-  const items = NAV_ITEMS.filter((i) => i.value !== 'reports');
+  const items = NAV_ITEMS.filter((i) => i.value !== 'reports' && i.value !== 'history');
   return (
     <nav
       className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-card/95 backdrop-blur border-t no-print"

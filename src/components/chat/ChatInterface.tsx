@@ -18,6 +18,7 @@ import { extractPartialMessage } from '@/lib/streamingMessage';
 import { sendChatMessage, readSSEStream, ChatContext } from '@/services/chatService';
 import { saveSingleLearnedMapping } from '@/services/categoryMappingService';
 import { useAuth } from '@/hooks/useAuth';
+import { trackEvent } from '@/services/analyticsService';
 import { MessageBubble } from './MessageBubble';
 import { PeriodKey, PERIOD_OPTIONS, getPeriodRange } from '@/lib/periodUtils';
 import { parseDateOnly, getLocalISODate } from '@/lib/dateUtils';
@@ -448,6 +449,7 @@ export function ChatInterface() {
     const userMessage = input.trim();
     setInput('');
     await addMessage('user', userMessage);
+    if (user) void trackEvent(user.id, 'chat_message_sent', { length: userMessage.length });
     setIsStreaming(true);
     setStreamingContent('');
 

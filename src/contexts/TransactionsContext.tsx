@@ -5,6 +5,9 @@ import { FilterState } from '@/components/dashboard/DashboardFilters';
 import { parseDateOnly } from '@/lib/dateUtils';
 import { calculateMetrics } from '@/lib/metricsCalculator';
 import { supabase } from '@/integrations/supabase/client';
+import { translateError, MESSAGES } from '@/lib/feedback';
+import { logActivity, type ActivitySource } from '@/services/activityLogService';
+import { trackEvent } from '@/services/analyticsService';
 import {
   fetchUserTransactions,
   insertTransaction,
@@ -107,6 +110,12 @@ function sortByDateDesc(txs: Transaction[]): Transaction[] {
   );
 }
 
+function describeTransaction(tx: Transaction): string {
+  const value = Number(tx.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const kind = tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Investimento';
+  return `${kind} · ${value} · ${tx.description || tx.category}`;
+}
+
 export function TransactionsProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -201,15 +210,24 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       const { data, error } = await insertTransaction(user.id, input);
 
       if (error || !data) {
-        toast({ title: 'Erro ao adicionar transação', description: error || 'Erro desconhecido', variant: 'destructive' });
+        toast({ title: MESSAGES.transaction.createFailed, description: translateError(error), variant: 'destructive' });
         return null;
       }
 
       setTransactions(prev => sortByDateDesc([data, ...prev]));
+      void logActivity(user.id, {
+        action: 'create',
+        entity: 'transaction',
+        entityId: data.id,
+        source: (data.source as ActivitySource) ?? 'manual',
+        label: describeTransaction(data),
+        after: data as unknown as Record<string, unknown>,
+      });
+      void trackEvent(user.id, 'transaction_created', { type: data.type, source: data.source, amount: data.amount });
       return data;
     } catch (e) {
       console.error('[Transactions] handleAddTransaction error:', e);
-      toast({ title: 'Erro ao adicionar transação', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
+      toast({ title: MESSAGES.transaction.createFailed, description: translateError(e), variant: 'destructive' });
       return null;
     }
   }, [user, toast]);
@@ -221,18 +239,26 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       const { data, error } = await insertMultipleTransactions(user.id, inputs);
 
       if (error) {
-        toast({ title: 'Erro ao importar transações', description: error, variant: 'destructive' });
+        toast({ title: MESSAGES.import.failed, description: translateError(error), variant: 'destructive' });
         return 0;
       }
 
       if (data.length > 0) {
         setTransactions(prev => sortByDateDesc([...data, ...prev]));
+        void logActivity(user.id, {
+          action: 'import',
+          entity: 'transaction',
+          source: 'upload',
+          label: `${data.length} transação(ões) importadas`,
+          after: { count: data.length },
+        });
+        void trackEvent(user.id, 'transactions_imported', { count: data.length });
       }
 
       return data.length;
     } catch (e) {
       console.error('[Transactions] handleAddMultiple error:', e);
-      toast({ title: 'Erro ao importar transações', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
+      toast({ title: MESSAGES.import.failed, description: translateError(e), variant: 'destructive' });
       return 0;
     }
   }, [user, toast]);
@@ -242,8 +268,10 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
     const now = new Date().toISOString();
     let rollback: Transaction[] | null = null;
+    let previous: Transaction | undefined;
     setTransactions(prev => {
       rollback = prev;
+      previous = prev.find(tx => tx.id === id);
       return prev.map(tx => tx.id === id ? { ...tx, ...updates, updated_at: now } : tx);
     });
 
@@ -252,16 +280,25 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         if (rollback) setTransactions(rollback);
-        toast({ title: 'Erro ao atualizar transação', description: error, variant: 'destructive' });
+        toast({ title: MESSAGES.transaction.updateFailed, description: translateError(error), variant: 'destructive' });
         return false;
       }
 
-      toast({ title: '✅ Transação atualizada!' });
+      toast({ title: `✅ ${MESSAGES.transaction.updated}` });
+      void logActivity(user.id, {
+        action: 'update',
+        entity: 'transaction',
+        entityId: id,
+        source: 'manual',
+        label: previous ? describeTransaction(previous) : 'Transação atualizada',
+        before: previous as unknown as Record<string, unknown> | undefined,
+        after: updates as unknown as Record<string, unknown>,
+      });
       return true;
     } catch (e) {
       console.error('[Transactions] handleUpdate error:', e);
       if (rollback) setTransactions(rollback);
-      toast({ title: 'Erro ao atualizar transação', description: 'Falha de rede ou erro inesperado', variant: 'destructive' });
+      toast({ title: MESSAGES.transaction.updateFailed, description: translateError(e), variant: 'destructive' });
       return false;
     }
   }, [user, toast]);
@@ -270,8 +307,10 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     if (!user) return false;
 
     let rollback: Transaction[] | null = null;
+    let previous: Transaction | undefined;
     setTransactions(prev => {
       rollback = prev;
+      previous = prev.find(tx => tx.id === id);
       return prev.filter(tx => tx.id !== id);
     });
 
@@ -279,11 +318,19 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       if (rollback) setTransactions(rollback);
-      toast({ title: 'Erro ao excluir transação', description: error, variant: 'destructive' });
+      toast({ title: MESSAGES.transaction.deleteFailed, description: translateError(error), variant: 'destructive' });
       return false;
     }
 
-    toast({ title: '🗑️ Transação excluída!' });
+    toast({ title: `🗑️ ${MESSAGES.transaction.deleted}` });
+    void logActivity(user.id, {
+      action: 'delete',
+      entity: 'transaction',
+      entityId: id,
+      source: 'manual',
+      label: previous ? describeTransaction(previous) : 'Transação excluída',
+      before: previous as unknown as Record<string, unknown> | undefined,
+    });
     return true;
   }, [user, toast]);
 
@@ -301,7 +348,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     });
 
     if (count === 0) {
-      toast({ title: 'Nenhuma transação para excluir' });
+      toast({ title: MESSAGES.transaction.none });
       return 0;
     }
 
@@ -309,12 +356,19 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       if (rollback) setTransactions(rollback);
-      toast({ title: 'Erro ao excluir transações', description: error, variant: 'destructive' });
+      toast({ title: MESSAGES.transaction.deleteFailed, description: translateError(error), variant: 'destructive' });
       return 0;
     }
 
     const label = filter === 'all' ? 'Todas as transações excluídas' : filter === 'income' ? 'Todas as receitas excluídas' : 'Todas as despesas excluídas';
     toast({ title: `🗑️ ${label}! (${count})` });
+    void logActivity(user.id, {
+      action: 'bulk_delete',
+      entity: 'transaction',
+      source: 'manual',
+      label: `${label} (${count})`,
+      before: { filter, count },
+    });
     return count;
   }, [user, toast]);
 

@@ -10,6 +10,7 @@ import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { ImportWizard } from '@/components/import/ImportWizard';
 import { InvestmentsTab } from '@/components/investments/InvestmentsTab';
 import { ReportsTab } from '@/components/reports/ReportsTab';
+import { ActivityHistoryTab } from '@/components/history/ActivityHistoryTab';
 import { OnboardingDialog } from '@/components/onboarding/OnboardingDialog';
 import { AppSidebar, NAV_ITEMS } from '@/components/layout/AppSidebar';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -119,6 +120,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
             )}
             {activeTab === 'import' && <ImportWizard />}
             {activeTab === 'reports' && <ReportsTab />}
+            {activeTab === 'history' && <ActivityHistoryTab />}
           </main>
 
           <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
