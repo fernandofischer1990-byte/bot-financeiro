@@ -9,6 +9,16 @@ import {
   updateInvestmentById,
   deleteInvestmentById,
 } from '@/services/investmentService';
+import { translateError, MESSAGES } from '@/lib/feedback';
+import { logActivity } from '@/services/activityLogService';
+import { trackEvent } from '@/services/analyticsService';
+
+function describeInvestment(inv: Investment): string {
+  const value = Number(inv.initial_amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return `${inv.investment_name} · ${value}${inv.institution ? ` · ${inv.institution}` : ''}`;
+}
+
+
 
 interface InvestmentsContextValue {
   investments: Investment[];
