@@ -120,6 +120,7 @@ function AuthenticatedApp({ signOut }: { signOut: () => Promise<void> }) {
             )}
             {activeTab === 'import' && <ImportWizard />}
             {activeTab === 'reports' && <ReportsTab />}
+            {activeTab === 'history' && <ActivityHistoryTab />}
           </main>
 
           <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
