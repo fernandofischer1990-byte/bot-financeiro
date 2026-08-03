@@ -76,10 +76,19 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
     if (!user) return null;
     const { data, error } = await insertInvestment(user.id, input);
     if (error || !data) {
-      toastRef.current({ title: 'Erro ao salvar investimento', description: error || 'erro', variant: 'destructive' });
+      toastRef.current({ title: MESSAGES.investment.createFailed, description: translateError(error), variant: 'destructive' });
       return null;
     }
     setInvestments(prev => [data, ...prev]);
+    void logActivity(user.id, {
+      action: 'create',
+      entity: 'investment',
+      entityId: data.id,
+      source: data.imported_from === 'manual' ? 'manual' : 'upload',
+      label: describeInvestment(data),
+      after: data as unknown as Record<string, unknown>,
+    });
+    void trackEvent(user.id, 'investment_created', { type: data.investment_type, amount: data.initial_amount });
     return data;
   }, [user]);
 
@@ -87,40 +96,74 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
     if (!user || inputs.length === 0) return 0;
     const { data, error } = await insertMultipleInvestments(user.id, inputs);
     if (error) {
-      toastRef.current({ title: 'Erro ao importar investimentos', description: error, variant: 'destructive' });
+      toastRef.current({ title: MESSAGES.import.failed, description: translateError(error), variant: 'destructive' });
       return 0;
     }
-    if (data.length > 0) setInvestments(prev => [...data, ...prev]);
+    if (data.length > 0) {
+      setInvestments(prev => [...data, ...prev]);
+      void logActivity(user.id, {
+        action: 'import',
+        entity: 'investment',
+        source: 'upload',
+        label: `${data.length} investimento(s) importados`,
+        after: { count: data.length },
+      });
+      void trackEvent(user.id, 'investments_imported', { count: data.length });
+    }
     return data.length;
   }, [user]);
 
   const updateInvestment = useCallback(async (id: string, updates: Partial<InvestmentInput>) => {
     if (!user) return false;
     let rollback: Investment[] | null = null;
+    let previous: Investment | undefined;
     setInvestments(prev => {
       rollback = prev;
+      previous = prev.find(i => i.id === id);
       return prev.map(i => i.id === id ? { ...i, ...updates } as Investment : i);
     });
     const { error } = await updateInvestmentById(user.id, id, updates);
     if (error) {
       if (rollback) setInvestments(rollback);
-      toastRef.current({ title: 'Erro ao atualizar investimento', description: error, variant: 'destructive' });
+      toastRef.current({ title: MESSAGES.investment.updateFailed, description: translateError(error), variant: 'destructive' });
       return false;
     }
+    void logActivity(user.id, {
+      action: 'update',
+      entity: 'investment',
+      entityId: id,
+      source: 'manual',
+      label: previous ? describeInvestment(previous) : 'Investimento atualizado',
+      before: previous as unknown as Record<string, unknown> | undefined,
+      after: updates as unknown as Record<string, unknown>,
+    });
     return true;
   }, [user]);
 
   const deleteInvestment = useCallback(async (id: string) => {
     if (!user) return false;
     let rollback: Investment[] | null = null;
-    setInvestments(prev => { rollback = prev; return prev.filter(i => i.id !== id); });
+    let previous: Investment | undefined;
+    setInvestments(prev => {
+      rollback = prev;
+      previous = prev.find(i => i.id === id);
+      return prev.filter(i => i.id !== id);
+    });
     const { error } = await deleteInvestmentById(user.id, id);
     if (error) {
       if (rollback) setInvestments(rollback);
-      toastRef.current({ title: 'Erro ao excluir investimento', description: error, variant: 'destructive' });
+      toastRef.current({ title: MESSAGES.investment.deleteFailed, description: translateError(error), variant: 'destructive' });
       return false;
     }
-    toastRef.current({ title: '🗑️ Investimento excluído' });
+    toastRef.current({ title: `🗑️ ${MESSAGES.investment.deleted}` });
+    void logActivity(user.id, {
+      action: 'delete',
+      entity: 'investment',
+      entityId: id,
+      source: 'manual',
+      label: previous ? describeInvestment(previous) : 'Investimento excluído',
+      before: previous as unknown as Record<string, unknown> | undefined,
+    });
     return true;
   }, [user]);
 
