@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,9 +11,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { translateError, MESSAGES } from '@/lib/feedback';
 import {
-  fetchActivityLog, type ActivityLogEntry, type ActivityAction, type ActivityEntity,
+  fetchActivityLog, type ActivityLogEntry, type ActivityLogCursor,
+  type ActivityAction, type ActivityEntity, type ActivitySource,
 } from '@/services/activityLogService';
-import { History, RefreshCw, Download, Search, Plus, Pencil, Trash2, Upload } from 'lucide-react';
+import { History, RefreshCw, Download, Search, Plus, Pencil, Trash2, Upload, Loader2, X } from 'lucide-react';
+
+const PAGE_SIZE = 50;
 
 const ACTION_LABEL: Record<string, string> = {
   create: 'Criação',
@@ -35,6 +38,24 @@ const SOURCE_LABEL: Record<string, string> = {
   mcp: 'Integração',
   system: 'Sistema',
 };
+
+/** Permite buscar em PT-BR ("criação", "assistente") mesmo com valores em inglês no banco. */
+const PT_ALIASES: Record<string, string> = {
+  criacao: 'create', criação: 'create', criado: 'create',
+  edicao: 'update', edição: 'update', editado: 'update',
+  exclusao: 'delete', exclusão: 'delete', excluido: 'delete', excluído: 'delete',
+  importacao: 'import', importação: 'import',
+  transacao: 'transaction', transação: 'transaction', transacoes: 'transaction',
+  investimento: 'investment', investimentos: 'investment',
+  assistente: 'chat', chatbot: 'chat',
+  integracao: 'mcp', integração: 'mcp',
+  sistema: 'system',
+};
+
+function normalizeSearch(term: string): string {
+  const t = term.trim().toLowerCase();
+  return PT_ALIASES[t] ?? t;
+}
 
 function actionIcon(action: string) {
   if (action === 'create') return Plus;
@@ -65,47 +86,79 @@ export function ActivityHistoryTab() {
   const { toast } = useToast();
   const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<ActivityLogCursor | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+
   const [entity, setEntity] = useState<ActivityEntity | 'all'>('all');
   const [action, setAction] = useState<ActivityAction | 'all'>('all');
+  const [source, setSource] = useState<ActivitySource | 'all'>('all');
   const [days, setDays] = useState<'7' | '30' | '90' | 'all'>('30');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  const load = useCallback(async () => {
+  // Debounce da busca (300ms) para não disparar consulta a cada tecla
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const reqRef = useRef(0);
+
+  const loadFirstPage = useCallback(async () => {
     if (!user) return;
+    const reqId = ++reqRef.current;
     setLoading(true);
-    const { data, error: err } = await fetchActivityLog(user.id, {
-      entity,
-      action,
+    const page = await fetchActivityLog(user.id, {
+      entity, action, source,
       days: days === 'all' ? 'all' : Number(days),
+      search: normalizeSearch(debouncedSearch),
+      pageSize: PAGE_SIZE,
     });
-    if (err) {
-      setError(translateError(err));
+    if (reqId !== reqRef.current) return; // resposta obsoleta
+    if (page.error) {
+      setError(translateError(page.error));
     } else {
-      setEntries(data ?? []);
+      setEntries(page.data);
+      setCursor(page.nextCursor);
+      setHasMore(page.hasMore);
       setError(null);
     }
     setLoading(false);
-  }, [user, entity, action, days]);
+  }, [user, entity, action, source, days, debouncedSearch]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadFirstPage(); }, [loadFirstPage]);
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter((e) =>
-      (e.label ?? '').toLowerCase().includes(q) ||
-      ENTITY_LABEL[e.entity]?.toLowerCase().includes(q) ||
-      ACTION_LABEL[e.action]?.toLowerCase().includes(q)
-    );
-  }, [entries, search]);
+  const loadMore = useCallback(async () => {
+    if (!user || !cursor || loadingMore) return;
+    setLoadingMore(true);
+    const page = await fetchActivityLog(user.id, {
+      entity, action, source,
+      days: days === 'all' ? 'all' : Number(days),
+      search: normalizeSearch(debouncedSearch),
+      cursor,
+      pageSize: PAGE_SIZE,
+    });
+    if (page.error) {
+      toast({ title: 'Não foi possível carregar mais registros', description: translateError(page.error), variant: 'destructive' });
+    } else {
+      setEntries((prev) => {
+        const seen = new Set(prev.map((e) => e.id));
+        return [...prev, ...page.data.filter((e) => !seen.has(e.id))];
+      });
+      setCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+    }
+    setLoadingMore(false);
+  }, [user, cursor, loadingMore, entity, action, source, days, debouncedSearch, toast]);
 
   const exportCsv = () => {
-    if (visible.length === 0) {
+    if (entries.length === 0) {
       toast({ title: MESSAGES.export.empty, variant: 'destructive' });
       return;
     }
-    const rows = visible.map((e) => ({
+    const rows = entries.map((e) => ({
       data_hora: formatDateTime(e.created_at),
       acao: ACTION_LABEL[e.action] ?? e.action,
       entidade: ENTITY_LABEL[e.entity] ?? e.entity,
@@ -123,6 +176,12 @@ export function ActivityHistoryTab() {
     toast({ title: MESSAGES.export.done, description: `${rows.length} registros em CSV.` });
   };
 
+  const clearFilters = () => {
+    setEntity('all'); setAction('all'); setSource('all'); setDays('30'); setSearch('');
+  };
+
+  const filtersActive = entity !== 'all' || action !== 'all' || source !== 'all' || days !== '30' || search.trim() !== '';
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -133,7 +192,7 @@ export function ActivityHistoryTab() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={load}>
+          <Button variant="outline" size="sm" onClick={loadFirstPage}>
             <RefreshCw className="h-4 w-4 mr-2" /> Atualizar
           </Button>
           <Button variant="outline" size="sm" onClick={exportCsv}>
@@ -147,19 +206,29 @@ export function ActivityHistoryTab() {
           <CardTitle className="flex items-center gap-2 text-base">
             <History className="h-4 w-4" /> Registros
           </CardTitle>
-          <CardDescription>Filtre por período, tipo de registro e ação.</CardDescription>
+          <CardDescription>Busque por descrição e filtre por período, origem, tipo de registro e ação.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <div className="relative">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="relative lg:col-span-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar no histórico"
-                className="pl-9"
+                placeholder="Buscar por descrição, valor, categoria ou ID do registro"
+                className="pl-9 pr-9"
                 aria-label="Buscar no histórico"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
             <Select value={days} onValueChange={(v) => setDays(v as typeof days)}>
               <SelectTrigger aria-label="Período"><SelectValue /></SelectTrigger>
@@ -189,46 +258,79 @@ export function ActivityHistoryTab() {
                 <SelectItem value="bulk_delete">Exclusão em massa</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={source} onValueChange={(v) => setSource(v as typeof source)}>
+              <SelectTrigger aria-label="Origem"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as origens</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="chat">Assistente</SelectItem>
+                <SelectItem value="upload">Importação</SelectItem>
+                <SelectItem value="mcp">Integração</SelectItem>
+                <SelectItem value="system">Sistema</SelectItem>
+              </SelectContent>
+            </Select>
+            {filtersActive && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="justify-start">
+                <X className="h-4 w-4 mr-2" /> Limpar filtros
+              </Button>
+            )}
           </div>
 
           <DataState
             loading={loading}
             error={error}
-            isEmpty={visible.length === 0}
-            onRetry={load}
+            isEmpty={entries.length === 0}
+            onRetry={loadFirstPage}
             skeletonRows={5}
             emptyIcon={History}
-            emptyTitle="Nenhuma atividade registrada"
-            emptyDescription="As próximas movimentações que você fizer aparecerão aqui com data, origem e detalhes."
+            emptyTitle="Nenhuma atividade encontrada"
+            emptyDescription="Ajuste a busca ou os filtros — ou registre uma nova movimentação para vê-la aqui."
           >
-            <ul className="divide-y">
-              {visible.map((e) => {
-                const Icon = actionIcon(e.action);
-                return (
-                  <li key={e.id} className="flex items-start gap-3 py-3">
-                    <div className={`mt-0.5 shrink-0 ${actionTone(e.action)}`}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-sm">
-                          {ACTION_LABEL[e.action] ?? e.action} · {ENTITY_LABEL[e.entity] ?? e.entity}
-                        </span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {SOURCE_LABEL[e.source] ?? e.source}
-                        </Badge>
+            <>
+              <ul className="divide-y">
+                {entries.map((e) => {
+                  const Icon = actionIcon(e.action);
+                  return (
+                    <li key={e.id} className="flex items-start gap-3 py-3">
+                      <div className={`mt-0.5 shrink-0 ${actionTone(e.action)}`}>
+                        <Icon className="h-4 w-4" />
                       </div>
-                      {e.label && (
-                        <p className="text-sm text-muted-foreground break-words">{e.label}</p>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDateTime(e.created_at)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-sm">
+                            {ACTION_LABEL[e.action] ?? e.action} · {ENTITY_LABEL[e.entity] ?? e.entity}
+                          </span>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {SOURCE_LABEL[e.source] ?? e.source}
+                          </Badge>
+                        </div>
+                        {e.label && (
+                          <p className="text-sm text-muted-foreground break-words">{e.label}</p>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDateTime(e.created_at)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="pt-4 flex flex-col items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {entries.length} {entries.length === 1 ? 'registro' : 'registros'} carregados
+                </span>
+                {hasMore ? (
+                  <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore}>
+                    {loadingMore
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Carregando…</>
+                      : 'Carregar mais'}
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Fim do histórico</span>
+                )}
+              </div>
+            </>
           </DataState>
         </CardContent>
       </Card>
