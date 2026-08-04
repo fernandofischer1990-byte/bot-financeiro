@@ -350,11 +350,16 @@ export function ChatInterface() {
           break;
         }
         const { id, ...fields } = action.payload;
-        const ok = await updateTransaction(id, fields);
-        if (ok) {
-          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
-          toast({ title: '🧾 Dados fiscais atualizados', description: changed });
-        }
+        setPendingFiscals(prev => [...prev, {
+          kind: 'transaction',
+          id,
+          label: `${tx.description || getCategoryLabel(tx.category)} · ${formatCurrency(Number(tx.amount))}`,
+          fields: [
+            { key: 'taxId', label: 'CPF/CNPJ', current: tx.taxId ?? null, next: fields.taxId },
+            { key: 'irpfCategory', label: 'Categoria IRPF', current: tx.irpfCategory ?? null, next: fields.irpfCategory },
+            { key: 'receiptUrl', label: 'Comprovante (URL)', current: tx.receiptUrl ?? null, next: fields.receiptUrl },
+          ].filter(f => f.next !== undefined),
+        }]);
         break;
       }
       case 'update_investment_fiscal': {
@@ -364,13 +369,24 @@ export function ChatInterface() {
           break;
         }
         const { id, ...fields } = action.payload;
-        const ok = await updateInvestment(id, fields);
-        if (ok) {
-          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
-          toast({ title: '🧾 Dados fiscais do investimento atualizados', description: changed });
-        }
+        setPendingFiscals(prev => [...prev, {
+          kind: 'investment',
+          id,
+          label: inv.investment_name,
+          fields: [
+            {
+              key: 'averagePrice',
+              label: 'Preço médio',
+              current: inv.averagePrice != null ? formatCurrency(inv.averagePrice) : null,
+              next: fields.averagePrice != null ? formatCurrency(fields.averagePrice) : undefined,
+              raw: fields.averagePrice,
+            },
+            { key: 'custodianCnpj', label: 'CNPJ do custodiante', current: inv.custodianCnpj ?? null, next: fields.custodianCnpj },
+          ].filter(f => f.next !== undefined),
+        }]);
         break;
       }
+
     }
   }, [transactions, investments, updateTransaction, updateInvestment, deleteTransaction, toast, runWebSearch]);
 
