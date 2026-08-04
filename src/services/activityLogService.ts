@@ -110,15 +110,19 @@ export async function fetchActivityLog(
 
     const term = escapeForOr(filters.search ?? '');
     if (term) {
-      query = query.or(
-        [
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(term);
+      if (isUuid) {
+        query = query.eq('entity_id', term);
+      } else {
+        query = query.or([
           `label.ilike.*${term}*`,
-          `entity_id.ilike.*${term}*`,
-          `before::text.ilike.*${term}*`,
-          `after::text.ilike.*${term}*`,
-        ].join(',')
-      );
+          `action.ilike.*${term}*`,
+          `entity.ilike.*${term}*`,
+          `source.ilike.*${term}*`,
+        ].join(','));
+      }
     }
+
 
     if (filters.cursor) {
       const { created_at, id } = filters.cursor;
