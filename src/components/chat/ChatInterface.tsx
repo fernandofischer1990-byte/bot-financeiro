@@ -11,7 +11,7 @@ import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown, FileText } from 'lucide-react';
 import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INVESTMENT_TYPES, INVESTMENT_OPERATIONS, getInvestmentTypeLabel, getInvestmentOperationLabel } from '@/lib/constants';
 import { parseAIResponse, Action } from '@/lib/actionParser';
 import { extractPartialMessage } from '@/lib/streamingMessage';
@@ -66,6 +66,23 @@ const INPUT_SUGGESTIONS = [
 type AddTxPayload = Extract<Action, { type: 'add_transaction' }>['payload'];
 type ClarificationPayload = Extract<Action, { type: 'request_clarification' }>['payload'];
 
+type FiscalKind = 'transaction' | 'investment';
+
+interface PendingFiscalField {
+  key: string;
+  label: string;
+  current: string | null;
+  next?: string;
+}
+
+interface PendingFiscal {
+  kind: FiscalKind;
+  id: string;
+  label: string;
+  payload: Record<string, string | number | undefined>;
+  fields: PendingFiscalField[];
+}
+
 interface PendingAdd {
   original: AddTxPayload;
   edited: AddTxPayload;
@@ -87,6 +104,7 @@ export function ChatInterface() {
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
   const [pendingAdds, setPendingAdds] = useState<PendingAdd[]>([]);
+  const [pendingFiscals, setPendingFiscals] = useState<PendingFiscal[]>([]);
   const [activeIntent, setActiveIntent] = useState<ClarificationPayload | null>(null);
 
   const [chatPeriod, setChatPeriod] = useState<PeriodKey>('all');
@@ -350,11 +368,17 @@ export function ChatInterface() {
           break;
         }
         const { id, ...fields } = action.payload;
-        const ok = await updateTransaction(id, fields);
-        if (ok) {
-          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
-          toast({ title: '🧾 Dados fiscais atualizados', description: changed });
-        }
+        setPendingFiscals(prev => [...prev, {
+          kind: 'transaction',
+          id,
+          payload: fields,
+          label: `${tx.description || getCategoryLabel(tx.category)} · ${formatCurrency(Number(tx.amount))}`,
+          fields: [
+            { key: 'taxId', label: 'CPF/CNPJ', current: tx.taxId ?? null, next: fields.taxId },
+            { key: 'irpfCategory', label: 'Categoria IRPF', current: tx.irpfCategory ?? null, next: fields.irpfCategory },
+            { key: 'receiptUrl', label: 'Comprovante (URL)', current: tx.receiptUrl ?? null, next: fields.receiptUrl },
+          ].filter(f => f.next !== undefined),
+        }]);
         break;
       }
       case 'update_investment_fiscal': {
@@ -364,13 +388,25 @@ export function ChatInterface() {
           break;
         }
         const { id, ...fields } = action.payload;
-        const ok = await updateInvestment(id, fields);
-        if (ok) {
-          const changed = Object.keys(fields).filter(k => fields[k as keyof typeof fields] !== undefined).join(', ');
-          toast({ title: '🧾 Dados fiscais do investimento atualizados', description: changed });
-        }
+        setPendingFiscals(prev => [...prev, {
+          kind: 'investment',
+          id,
+          payload: fields,
+          label: inv.investment_name,
+          fields: [
+            {
+              key: 'averagePrice',
+              label: 'Preço médio',
+              current: inv.averagePrice != null ? formatCurrency(inv.averagePrice) : null,
+              next: fields.averagePrice != null ? formatCurrency(fields.averagePrice) : undefined,
+            },
+
+            { key: 'custodianCnpj', label: 'CNPJ do custodiante', current: inv.custodianCnpj ?? null, next: fields.custodianCnpj },
+          ].filter(f => f.next !== undefined),
+        }]);
         break;
       }
+
     }
   }, [transactions, investments, updateTransaction, updateInvestment, deleteTransaction, toast, runWebSearch]);
 
@@ -380,6 +416,25 @@ export function ChatInterface() {
 
   const removePending = (idx: number) => {
     setPendingAdds(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const removePendingFiscal = (idx: number) => {
+    setPendingFiscals(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleConfirmFiscal = async (idx: number) => {
+    const item = pendingFiscals[idx];
+    if (!item) return;
+    const ok = item.kind === 'transaction'
+      ? await updateTransaction(item.id, item.payload as Record<string, never>)
+      : await updateInvestment(item.id, item.payload as Record<string, never>);
+    if (ok) {
+      toast({
+        title: item.kind === 'transaction' ? '🧾 Dados fiscais atualizados' : '🧾 Dados fiscais do investimento atualizados',
+        description: item.fields.map(f => f.label).join(', '),
+      });
+    }
+    removePendingFiscal(idx);
   };
 
   const handleConfirmAdd = async (idx: number) => {
@@ -621,6 +676,15 @@ export function ChatInterface() {
                 <span className="text-sm">Pesquisando na internet: <em>{webSearching}</em></span>
               </div>
             )}
+
+            {pendingFiscals.map((p, idx) => (
+              <PendingFiscalCard
+                key={`fiscal-${p.kind}-${p.id}-${idx}`}
+                pending={p}
+                onConfirm={() => handleConfirmFiscal(idx)}
+                onCancel={() => removePendingFiscal(idx)}
+              />
+            ))}
 
             {pendingAdds.map((p, idx) => (
               <PendingAddCard
@@ -873,6 +937,53 @@ function PendingAddCard({ pending, monthlyIncome, onChange, onConfirm, onCancel 
           <Button size="sm" onClick={onConfirm} className="flex-1">Confirmar</Button>
           <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">Cancelar</Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Fiscal fields confirmation card ─────────────────────────────────
+function PendingFiscalCard({
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  pending: PendingFiscal;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-card p-4 space-y-3 animate-fade-in">
+      <div className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-primary" />
+        <p className="text-sm font-semibold">
+          Confirmar dados fiscais — {pending.kind === 'transaction' ? 'Transação' : 'Investimento'}
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground break-words">{pending.label}</p>
+
+      <ul className="space-y-2">
+        {pending.fields.map((f) => (
+          <li key={f.key} className="text-xs">
+            <span className="font-medium">{f.label}</span>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className="text-muted-foreground line-through break-all">
+                {f.current || 'vazio'}
+              </span>
+              <span className="text-muted-foreground">→</span>
+              <span className="text-primary font-medium break-all">{f.next}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <p className="text-[11px] text-muted-foreground">
+        Nada é salvo até você confirmar.
+      </p>
+
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">Cancelar</Button>
+        <Button size="sm" onClick={onConfirm} className="flex-1">Confirmar</Button>
       </div>
     </div>
   );
