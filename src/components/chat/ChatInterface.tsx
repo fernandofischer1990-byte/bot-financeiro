@@ -379,8 +379,8 @@ export function ChatInterface() {
               label: 'Preço médio',
               current: inv.averagePrice != null ? formatCurrency(inv.averagePrice) : null,
               next: fields.averagePrice != null ? formatCurrency(fields.averagePrice) : undefined,
-              raw: fields.averagePrice,
             },
+
             { key: 'custodianCnpj', label: 'CNPJ do custodiante', current: inv.custodianCnpj ?? null, next: fields.custodianCnpj },
           ].filter(f => f.next !== undefined),
         }]);
