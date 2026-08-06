@@ -1,4 +1,4 @@
-import { read, utils } from 'xlsx';
+import { read, utils } from '@e965/xlsx';
 import { InvestmentInput, InvestmentType } from '@/types/investment';
 import { normalizeToLocalDate } from '@/lib/dateUtils';
 
