@@ -1,4 +1,4 @@
-import { read, utils } from 'xlsx';
+import { read, utils } from '@e965/xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeTransactionRow, NormalizedTransactionRow, normalizeCategory } from '@/lib/transactionNormalization';
 import { normalizeToLocalDate } from '@/lib/dateUtils';

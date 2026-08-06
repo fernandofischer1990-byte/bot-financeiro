@@ -1,5 +1,11 @@
 import { Transaction } from '@/contexts/TransactionsContext';
 import { getLocalISODate } from '@/lib/dateUtils';
+import {
+  getCurrentMonthKey,
+  getMonthKey,
+  getOperationalMonthTotals,
+  getScope,
+} from '@/lib/metricsCalculator';
 
 // ── Monthly metrics (current calendar month) ────────────────────────
 
@@ -10,34 +16,26 @@ export interface MonthlyMetrics {
 }
 
 export function getMonthlyMetrics(txs: Transaction[]): MonthlyMetrics {
-  const now = new Date();
-  const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-  let income = 0;
-  let expenses = 0;
-
-  for (const tx of txs) {
-    if (!tx.transaction_date.startsWith(prefix)) continue;
-    const amt = Number(tx.amount);
-    if (tx.type === 'income') income += amt;
-    else expenses += amt;
-  }
-
-  return { income_month: income, expenses_month: expenses, balance_month: income - expenses };
+  const totals = getOperationalMonthTotals(txs, getCurrentMonthKey());
+  return {
+    income_month: totals.income,
+    expenses_month: totals.expenses,
+    balance_month: totals.balance,
+  };
 }
 
 // ── Previous month metrics (for comparison) ─────────────────────────
 
 function getPreviousMonthMetrics(txs: Transaction[]): { byCategory: Record<string, number>; totalExpenses: number } {
   const now = new Date();
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prefix = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+  const prefix = getCurrentMonthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 
   const byCategory: Record<string, number> = {};
   let totalExpenses = 0;
 
   for (const tx of txs) {
-    if (tx.type !== 'expense' || !tx.transaction_date.startsWith(prefix)) continue;
+    if (tx.type !== 'expense' || getScope(tx) !== 'operational') continue;
+    if (getMonthKey(tx.transaction_date) !== prefix) continue;
     const amt = Number(tx.amount);
     byCategory[tx.category] = (byCategory[tx.category] || 0) + amt;
     totalExpenses += amt;
@@ -61,12 +59,12 @@ export interface CategoryAmount {
 }
 
 export function getTopCategories(txs: Transaction[], limit = 5): CategoryAmount[] {
-  const now = new Date();
-  const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const prefix = getCurrentMonthKey();
   const map: Record<string, number> = {};
 
   for (const tx of txs) {
-    if (tx.type !== 'expense' || !tx.transaction_date.startsWith(prefix)) continue;
+    if (tx.type !== 'expense' || getScope(tx) !== 'operational') continue;
+    if (getMonthKey(tx.transaction_date) !== prefix) continue;
     map[tx.category] = (map[tx.category] || 0) + Number(tx.amount);
   }
 

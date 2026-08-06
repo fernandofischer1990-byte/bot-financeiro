@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { read, utils } from 'xlsx';
+import { read, utils } from '@e965/xlsx';
 
 import { FileDropZone } from './FileDropZone';
 import { ColumnMapper, ColumnMapping } from './ColumnMapper';

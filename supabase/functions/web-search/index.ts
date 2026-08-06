@@ -1,9 +1,49 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https:\/\/bot-financeiro\.lovable\.app$/,
+  /^https:\/\/([a-z0-9-]+\.)*lovable\.app$/,
+  /^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/,
+];
+
+const ALLOWED_HEADERS =
+  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
+
+function buildCors(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") ?? "";
+  const allowed = ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin));
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers": ALLOWED_HEADERS,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
+  if (allowed) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
+}
+
+/** Validates the caller's session token. Returns the user id or null. */
+async function verifyAuth(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.replace("Bearer ", "");
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data, error } = await supabase.auth.getClaims(token);
+    if (error || !data?.claims?.sub) return null;
+    return data.claims.sub as string;
+  } catch {
+    return null;
+  }
+}
+
 
 const nowStamp = () =>
   new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -529,10 +569,19 @@ REGRAS CRÍTICAS:
 // HTTP entrypoint
 // =====================================================================
 serve(async (req) => {
+  const corsHeaders = buildCors(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const userId = await verifyAuth(req);
+  if (!userId) {
+    return new Response(JSON.stringify({ error: "Não autorizado" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   try {
     const { query } = await req.json();
+
     if (!query || typeof query !== "string" || query.length > 500) {
       return new Response(JSON.stringify({ error: "Query inválida" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

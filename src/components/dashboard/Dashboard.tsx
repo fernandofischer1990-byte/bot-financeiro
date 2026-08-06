@@ -12,6 +12,7 @@ import { InsightsPanel } from './InsightsPanel';
 import { TransactionMetrics, Transaction } from '@/contexts/TransactionsContext';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
+import { getOperationalMonthTotals, getCurrentMonthKey } from '@/lib/metricsCalculator';
 import {
   Wallet, Briefcase, Coins, TrendingUp, TrendingDown, RefreshCw, AlertCircle,
   PiggyBank, Percent, Plus, Upload,
@@ -53,34 +54,22 @@ export function Dashboard({
   const { investments } = useInvestmentsContext();
   const { transactions: allTransactions } = useTransactionsContext();
 
-  // Month-over-month
+  // Month-over-month — usa a fonte única de cálculo (metricsCalculator)
   const trends = useMemo(() => {
-    const curr = new Date();
-    const prev = new Date();
-    prev.setMonth(prev.getMonth() - 1);
-    const ck = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}`;
-    const pk = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
-    let cInc = 0, cExp = 0, pInc = 0, pExp = 0;
-    for (const t of allTransactions) {
-      if ((t.financial_scope ?? 'operational') !== 'operational') continue;
-      const mk = t.transaction_date.substring(0, 7);
-      const amt = Number(t.amount);
-      if (mk === ck) {
-        if (t.type === 'income') cInc += amt;
-        if (t.type === 'expense') cExp += amt;
-      } else if (mk === pk) {
-        if (t.type === 'income') pInc += amt;
-        if (t.type === 'expense') pExp += amt;
-      }
-    }
+    const now = new Date();
+    const curr = getOperationalMonthTotals(allTransactions, getCurrentMonthKey(now));
+    const prev = getOperationalMonthTotals(
+      allTransactions,
+      getCurrentMonthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+    );
     return {
-      balanceTrend: pct(cInc - cExp, pInc - pExp),
-      incomeTrend: pct(cInc, pInc),
-      expenseTrend: pct(cExp, pExp),
-      currMonthIncome: cInc,
-      currMonthExpense: cExp,
-      monthSavings: cInc - cExp,
-      savingsRate: cInc > 0 ? ((cInc - cExp) / cInc) * 100 : 0,
+      balanceTrend: pct(curr.balance, prev.balance),
+      incomeTrend: pct(curr.income, prev.income),
+      expenseTrend: pct(curr.expenses, prev.expenses),
+      currMonthIncome: curr.income,
+      currMonthExpense: curr.expenses,
+      monthSavings: curr.balance,
+      savingsRate: curr.income > 0 ? (curr.balance / curr.income) * 100 : 0,
     };
   }, [allTransactions]);
 
