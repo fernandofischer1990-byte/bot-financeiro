@@ -59,12 +59,12 @@ export interface CategoryAmount {
 }
 
 export function getTopCategories(txs: Transaction[], limit = 5): CategoryAmount[] {
-  const now = new Date();
-  const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const prefix = getCurrentMonthKey();
   const map: Record<string, number> = {};
 
   for (const tx of txs) {
-    if (tx.type !== 'expense' || !tx.transaction_date.startsWith(prefix)) continue;
+    if (tx.type !== 'expense' || getScope(tx) !== 'operational') continue;
+    if (getMonthKey(tx.transaction_date) !== prefix) continue;
     map[tx.category] = (map[tx.category] || 0) + Number(tx.amount);
   }
 
