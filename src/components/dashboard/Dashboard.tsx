@@ -12,6 +12,7 @@ import { InsightsPanel } from './InsightsPanel';
 import { TransactionMetrics, Transaction } from '@/contexts/TransactionsContext';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useTransactionsContext } from '@/contexts/TransactionsContext';
+import { getOperationalMonthTotals, getCurrentMonthKey } from '@/lib/metricsCalculator';
 import {
   Wallet, Briefcase, Coins, TrendingUp, TrendingDown, RefreshCw, AlertCircle,
   PiggyBank, Percent, Plus, Upload,
