@@ -569,10 +569,19 @@ REGRAS CRÍTICAS:
 // HTTP entrypoint
 // =====================================================================
 serve(async (req) => {
+  const corsHeaders = buildCors(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const userId = await verifyAuth(req);
+  if (!userId) {
+    return new Response(JSON.stringify({ error: "Não autorizado" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   try {
     const { query } = await req.json();
+
     if (!query || typeof query !== "string" || query.length > 500) {
       return new Response(JSON.stringify({ error: "Query inválida" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
