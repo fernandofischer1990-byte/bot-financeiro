@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Briefcase, MessageSquare, Plus, Upload, FileBarChart, Wallet, History } from 'lucide-react';
 import {
   Sidebar,
@@ -15,26 +15,27 @@ import {
 
 export interface NavSection {
   value: string;
+  path: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
 export const NAV_ITEMS: NavSection[] = [
-  { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { value: 'investments', label: 'Investimentos', icon: Briefcase },
-  { value: 'chat', label: 'Chat', icon: MessageSquare },
-  { value: 'add', label: 'Adicionar', icon: Plus },
-  { value: 'import', label: 'Importar', icon: Upload },
-  { value: 'reports', label: 'Relatórios', icon: FileBarChart },
-  { value: 'history', label: 'Histórico', icon: History },
+  { value: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { value: 'investments', path: '/investimentos', label: 'Investimentos', icon: Briefcase },
+  { value: 'chat', path: '/chat', label: 'Chat', icon: MessageSquare },
+  { value: 'add', path: '/adicionar', label: 'Adicionar', icon: Plus },
+  { value: 'import', path: '/importar', label: 'Importar', icon: Upload },
+  { value: 'reports', path: '/relatorios', label: 'Relatórios', icon: FileBarChart },
+  { value: 'history', path: '/historico', label: 'Histórico', icon: History },
 ];
 
-interface AppSidebarProps {
-  activeTab: string;
-  onTabChange: (v: string) => void;
+/** Resolve o caminho de uma aba legada (`dashboard`, `add`, …) para a rota real. */
+export function pathForTab(tab: string): string {
+  return NAV_ITEMS.find((i) => i.value === tab)?.path ?? '/dashboard';
 }
 
-export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
+export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
 
@@ -55,18 +56,18 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
             <SidebarMenu>
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.value;
                 return (
                   <SidebarMenuItem key={item.value}>
-                    <SidebarMenuButton
-                      onClick={() => onTabChange(item.value)}
-                      isActive={isActive}
-                      tooltip={item.label}
-                      className="cursor-pointer"
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
+                    <NavLink to={item.path}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                          <span>
+                            <Icon className="h-4 w-4" />
+                            <span>{item.label}</span>
+                          </span>
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
                   </SidebarMenuItem>
                 );
               })}

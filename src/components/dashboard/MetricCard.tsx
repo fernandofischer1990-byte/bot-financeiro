@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatCurrency } from '@/lib/constants';
@@ -34,7 +35,7 @@ function valueFontSize(text: string): string {
   return 'text-sm sm:text-base';
 }
 
-export function MetricCard({
+function MetricCardComponent({
   title,
   value,
   icon: Icon,
@@ -128,3 +129,6 @@ export function MetricCard({
     </Card>
   );
 }
+
+/** Memoizado: cards de métrica só re-renderizam quando o valor/props mudam. */
+export const MetricCard = memo(MetricCardComponent);

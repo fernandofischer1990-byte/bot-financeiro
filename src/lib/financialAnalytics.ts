@@ -164,13 +164,72 @@ export function detectSpendingInsights(txs: Transaction[]): string[] {
   return insights.slice(0, 5);
 }
 
-// ── Budget awareness (placeholder) ──────────────────────────────────
+// ── Budget awareness ────────────────────────────────────────────────
 
-export function computeBudgetAwareness(): { configured: false; message: string } {
-  return {
-    configured: false,
-    message: 'Orçamentos não configurados. Você pode definir metas de gastos por categoria no futuro!',
-  };
+export interface BudgetStatus {
+  category: string;
+  budget: number;
+  spent: number;
+  /** Percentual consumido do orçamento (pode passar de 100). */
+  pct: number;
+  remaining: number;
+  level: 'ok' | 'warning' | 'exceeded';
+}
+
+export interface BudgetAwareness {
+  configured: boolean;
+  message: string;
+  statuses: BudgetStatus[];
+}
+
+/**
+ * Compara os gastos operacionais do mês com os orçamentos definidos por categoria.
+ * `monthKey` no formato YYYY-MM; usa apenas o prefixo da data (sem timezone local).
+ */
+export function computeBudgetAwareness(
+  txs: Transaction[],
+  budgets: Array<{ category: string; amount: number }>,
+  monthKey: string
+): BudgetAwareness {
+  if (budgets.length === 0) {
+    return {
+      configured: false,
+      message: 'Orçamentos não configurados. Defina metas de gastos por categoria para acompanhar seu mês.',
+      statuses: [],
+    };
+  }
+
+  const spentByCategory = new Map<string, number>();
+  for (const tx of txs) {
+    if (tx.type !== 'expense') continue;
+    if ((tx.financial_scope ?? 'operational') !== 'operational') continue;
+    if (!tx.transaction_date?.startsWith(monthKey)) continue;
+    spentByCategory.set(tx.category, (spentByCategory.get(tx.category) ?? 0) + Number(tx.amount));
+  }
+
+  const statuses: BudgetStatus[] = budgets.map((b) => {
+    const spent = spentByCategory.get(b.category) ?? 0;
+    const pct = b.amount > 0 ? (spent / b.amount) * 100 : 0;
+    return {
+      category: b.category,
+      budget: b.amount,
+      spent,
+      pct,
+      remaining: b.amount - spent,
+      level: pct >= 100 ? 'exceeded' : pct >= 80 ? 'warning' : 'ok',
+    };
+  });
+
+  const exceeded = statuses.filter((s) => s.level === 'exceeded');
+  const warning = statuses.filter((s) => s.level === 'warning');
+
+  const message = exceeded.length
+    ? `${exceeded.length} categoria(s) acima do orçamento neste mês.`
+    : warning.length
+      ? `${warning.length} categoria(s) próxima(s) do limite do orçamento.`
+      : 'Todos os orçamentos do mês estão sob controle.';
+
+  return { configured: true, message, statuses };
 }
 
 // ── Spending alert for a single transaction ─────────────────────────

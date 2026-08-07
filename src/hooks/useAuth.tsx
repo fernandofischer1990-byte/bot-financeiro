@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/services/analyticsService';
+import { logger } from '@/lib/logger';
 
 interface AuthContextType {
   user: User | null;
@@ -23,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    console.log('[Auth] Initializing auth provider');
+    logger.debug('[Auth] Initializing auth provider');
 
     // Hard safety net: never keep the app blocked forever
     const timeoutId = window.setTimeout(() => {
@@ -37,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       window.clearTimeout(timeoutId);
-      console.log(`[Auth] State change: ${event}, user: ${session?.user?.id ?? 'none'}`);
+      logger.debug(`[Auth] State change: ${event}, user: ${session?.user?.id ?? 'none'}`);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        console.log(`[Auth] Session recovered: ${session?.user?.id ?? 'none'}`);
+        logger.debug(`[Auth] Session recovered: ${session?.user?.id ?? 'none'}`);
         setSession(session);
         setUser(session?.user ?? null);
       } catch (err) {

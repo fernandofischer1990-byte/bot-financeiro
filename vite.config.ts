@@ -16,4 +16,16 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Bibliotecas pesadas ficam em chunks próprios, carregados só nas rotas que as usam.
+        manualChunks: {
+          charts: ["recharts"],
+          spreadsheet: ["@e965/xlsx"],
+          supabase: ["@supabase/supabase-js"],
+        },
+      },
+    },
+  },
 }));

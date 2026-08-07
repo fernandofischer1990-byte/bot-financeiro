@@ -29,6 +29,8 @@ export type {
   TransactionMetrics,
 } from '@/types/finance';
 
+import { parseRealtimeTransaction, parseRealtimeDeletedId } from '@/lib/realtimeSchemas';
+import { logger } from '@/lib/logger';
 import type {
   Transaction,
   TransactionInput,
@@ -118,12 +120,12 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       setTransactions([]);
       setInitialLoading(false);
       setLoadError(null);
-      console.log('[Transactions] No user — cleared state');
+      logger.debug('[Transactions] No user — cleared state');
       return;
     }
 
     if (fetchingRef.current) {
-      console.log('[Transactions] Fetch already in progress — skipping');
+      logger.debug('[Transactions] Fetch already in progress — skipping');
       return;
     }
     fetchingRef.current = true;
@@ -135,7 +137,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       setRefreshing(true);
     }
 
-    console.log('[Transactions] Fetching user data');
+    logger.debug('[Transactions] Fetching user data');
     const { data, error } = await fetchUserTransactions(user.id);
 
     if (error) {
@@ -150,7 +152,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       setLoadError(null);
       hasLoadedOnceRef.current = true;
       setHasLoadedOnce(true);
-      console.log(`[Transactions] Loaded ${data.length} transactions`);
+      logger.debug(`[Transactions] Loaded ${data.length} transactions`);
     }
 
     fetchingRef.current = false;
@@ -239,7 +241,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      toast({ title: `✅ ${MESSAGES.transaction.updated}` });
+      toast({ title: `${MESSAGES.transaction.updated}` });
       void logActivity(user.id, {
         action: 'update',
         entity: 'transaction',
@@ -277,7 +279,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    toast({ title: `🗑️ ${MESSAGES.transaction.deleted}` });
+    toast({ title: `${MESSAGES.transaction.deleted}` });
     void logActivity(user.id, {
       action: 'delete',
       entity: 'transaction',
@@ -316,7 +318,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     }
 
     const label = filter === 'all' ? 'Todas as transações excluídas' : filter === 'income' ? 'Todas as receitas excluídas' : 'Todas as despesas excluídas';
-    toast({ title: `🗑️ ${label}! (${count})` });
+    toast({ title: `${label}! (${count})` });
     void logActivity(user.id, {
       action: 'bulk_delete',
       entity: 'transaction',
@@ -330,7 +332,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   // Initial fetch — only after auth is resolved
   useEffect(() => {
     if (!authLoading) {
-      console.log(`[Transactions] Auth resolved — user: ${user?.id ?? 'none'}`);
+      logger.debug(`[Transactions] Auth resolved — user: ${user?.id ?? 'none'}`);
       fetchTransactions();
     }
   }, [authLoading, fetchTransactions]);
@@ -338,25 +340,20 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
   // Realtime — reflect external mutations (e.g. via MCP) in the dashboard
   useEffect(() => {
     if (!user) return;
-    const castTx = (row: Record<string, unknown>): Transaction => ({
-      ...(row as any),
-      financial_scope: (row as any).financial_scope ?? ((row as any).type === 'investment' ? 'investment' : 'operational'),
-      investment_operation: (row as any).investment_operation ?? null,
-      investment_type: (row as any).investment_type ?? null,
-      institution: (row as any).institution ?? null,
-    });
     const channel = supabase
       .channel(`transactions:${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
-        const tx = castTx(payload.new as Record<string, unknown>);
+        const tx = parseRealtimeTransaction(payload.new);
+        if (!tx) return;
         setTransactions(prev => prev.some(t => t.id === tx.id) ? prev : sortByDateDesc([tx, ...prev]));
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
-        const tx = castTx(payload.new as Record<string, unknown>);
+        const tx = parseRealtimeTransaction(payload.new);
+        if (!tx) return;
         setTransactions(prev => sortByDateDesc(prev.map(t => t.id === tx.id ? tx : t)));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
-        const id = (payload.old as any)?.id;
+        const id = parseRealtimeDeletedId(payload.old);
         if (!id) return;
         setTransactions(prev => prev.filter(t => t.id !== id));
       })

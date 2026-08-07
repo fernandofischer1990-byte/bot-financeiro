@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +31,7 @@ function getDateGroupLabel(dateStr: string): string {
   return format(date, "d 'de' MMMM", { locale: ptBR });
 }
 
-export function TransactionList({ 
+function TransactionListComponent({ 
   transactions, 
   onDelete, 
   onEdit, 
@@ -277,3 +277,8 @@ export function TransactionList({
     </Card>
   );
 }
+
+/**
+ * Memoizado: a lista só re-renderiza quando as transações ou os callbacks mudam.
+ */
+export const TransactionList = memo(TransactionListComponent);

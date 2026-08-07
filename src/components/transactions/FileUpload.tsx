@@ -45,7 +45,7 @@ export function FileUpload() {
         setExtractedTransactions(result.transactions);
         setSummary(result.summary);
         setStep('preview');
-        toast({ title: `✅ ${result.transactions.length} transações extraídas!`, description: 'Revise e confirme a importação' });
+        toast({ title: `${result.transactions.length} transações extraídas!`, description: 'Revise e confirme a importação' });
       } catch (error) {
         toast({ title: 'Erro ao processar PDF', description: error instanceof Error ? error.message : 'Verifique se o arquivo é um extrato bancário válido', variant: 'destructive' });
         resetState();
@@ -80,7 +80,7 @@ export function FileUpload() {
     }));
 
     const count = await addMultipleTransactions(inputs);
-    if (count > 0) { toast({ title: `✅ ${count} transações importadas!` }); resetState(); }
+    if (count > 0) { toast({ title: `${count} transações importadas!` }); resetState(); }
     else setStep('preview');
   };
 
@@ -98,7 +98,7 @@ export function FileUpload() {
     }));
 
     const count = await addMultipleTransactions(inputs);
-    if (count > 0) { toast({ title: `✅ ${count} transações importadas!` }); resetState(); }
+    if (count > 0) { toast({ title: `${count} transações importadas!` }); resetState(); }
     else setStep('preview');
   };
 

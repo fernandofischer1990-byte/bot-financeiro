@@ -62,7 +62,7 @@ export function InvestmentImportWizard({ open, onOpenChange }: Props) {
     setStep('saving');
     const count = await addMultipleInvestments(rows.map(r => r.input));
     setSavedCount(count);
-    if (count > 0) toast({ title: `✅ ${count} investimento(s) importado(s)` });
+    if (count > 0) toast({ title: `${count} investimento(s) importado(s)` });
     setStep('done');
   };
 
