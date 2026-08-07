@@ -12,6 +12,7 @@ import {
 import { translateError, MESSAGES } from '@/lib/feedback';
 import { logActivity } from '@/services/activityLogService';
 import { trackEvent } from '@/services/analyticsService';
+import { logger } from '@/lib/logger';
 
 function describeInvestment(inv: Investment): string {
   const value = Number(inv.initial_amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -74,7 +75,7 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
     } else if (data) {
       setInvestments(data);
       setLoadError(null);
-      console.log(`[Investments] Loaded ${data.length} investments`);
+      logger.debug(`[Investments] Loaded ${data.length} investments`);
     }
     fetchingRef.current = false;
     setInitialLoading(false);
@@ -165,7 +166,7 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
       toastRef.current({ title: MESSAGES.investment.deleteFailed, description: translateError(error), variant: 'destructive' });
       return false;
     }
-    toastRef.current({ title: `🗑️ ${MESSAGES.investment.deleted}` });
+    toastRef.current({ title: `${MESSAGES.investment.deleted}` });
     void logActivity(user.id, {
       action: 'delete',
       entity: 'investment',

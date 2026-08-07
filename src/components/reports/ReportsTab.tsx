@@ -8,6 +8,9 @@ import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { formatCurrency } from '@/lib/constants';
 import { Download, Flame, Target, TrendingUp, FileText, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { DataState } from '@/components/common/DataState';
+import { BudgetsPanel } from './BudgetsPanel';
+import { buildIrpfReport, irpfReportRows } from '@/lib/irpfReport';
 
 function toCsv(rows: Array<Record<string, string | number | null | undefined>>): string {
   if (rows.length === 0) return '';
@@ -34,6 +37,9 @@ export function ReportsTab() {
   const { investments } = useInvestmentsContext();
   const { overallMetrics } = useFinancialMetrics();
   const { toast } = useToast();
+  const { initialLoading, hasLoadedOnce, loadError, refetch } = useTransactionsContext();
+
+  const irpfYear = new Date().getFullYear() - 1;
 
   const streak = useMemo(() => {
     if (transactions.length === 0) return 0;
@@ -73,7 +79,7 @@ export function ReportsTab() {
         instituicao: t.institution ?? '',
       }));
       downloadFile(`transacoes-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows), 'text/csv');
-      toast({ title: '✅ Exportado', description: `${rows.length} transações em CSV.` });
+      toast({ title: 'Exportado', description: `${rows.length} transações em CSV.` });
     } else {
       if (investments.length === 0) {
         toast({ title: 'Sem dados', description: 'Nenhum investimento para exportar.', variant: 'destructive' });
@@ -88,8 +94,23 @@ export function ReportsTab() {
         data_fim: i.end_date ?? '',
       }));
       downloadFile(`investimentos-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows), 'text/csv');
-      toast({ title: '✅ Exportado', description: `${rows.length} investimentos em CSV.` });
+      toast({ title: 'Exportado', description: `${rows.length} investimentos em CSV.` });
     }
+  };
+
+  const exportIrpf = () => {
+    const report = buildIrpfReport(transactions, investments, irpfYear);
+    const rows = irpfReportRows(report);
+    if (rows.length === 0) {
+      toast({
+        title: 'Sem dados fiscais',
+        description: `Nenhum registro com dados de IRPF para o ano-calendário ${irpfYear}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    downloadFile(`irpf-${irpfYear}.csv`, toCsv(rows), 'text/csv');
+    toast({ title: 'Exportado', description: `${rows.length} linhas do relatório IRPF ${irpfYear}.` });
   };
 
   return (
@@ -99,6 +120,13 @@ export function ReportsTab() {
         <p className="text-sm text-muted-foreground">Exporte seus dados e acompanhe suas conquistas financeiras.</p>
       </div>
 
+      <DataState
+        loading={initialLoading || !hasLoadedOnce}
+        error={loadError}
+        onRetry={refetch}
+        skeletonRows={4}
+      >
+        <div className="space-y-6">
       {/* Gamificação */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -159,6 +187,10 @@ export function ReportsTab() {
               Investimentos (CSV)
             </Button>
           </div>
+          <Button variant="outline" onClick={exportIrpf} className="w-full justify-start">
+            <Download className="h-4 w-4 mr-2" />
+            Relatório IRPF {irpfYear} (CSV)
+          </Button>
           <Button variant="outline" onClick={() => window.print()} className="w-full justify-start">
             <Printer className="h-4 w-4 mr-2" />
             Imprimir / Salvar PDF
@@ -168,6 +200,10 @@ export function ReportsTab() {
           </p>
         </CardContent>
       </Card>
+
+      <BudgetsPanel />
+        </div>
+      </DataState>
     </div>
   );
 }

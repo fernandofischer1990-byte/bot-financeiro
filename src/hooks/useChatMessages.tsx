@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import { logger } from '@/lib/logger';
 import {
   ChatMessageRow,
   fetchChatMessages,
@@ -24,7 +25,7 @@ export function useChatMessages() {
     }
 
     setLoading(true);
-    console.log('[Chat] Fetching messages for user');
+    logger.debug('[Chat] Fetching messages for user');
 
     const { data, error } = await fetchChatMessages(user.id);
 
@@ -32,7 +33,7 @@ export function useChatMessages() {
       console.error('[Chat] Error fetching messages:', error);
     } else if (data !== null) {
       setMessages(data);
-      console.log(`[Chat] Loaded ${data.length} messages`);
+      logger.debug(`[Chat] Loaded ${data.length} messages`);
     }
 
     setLoading(false);

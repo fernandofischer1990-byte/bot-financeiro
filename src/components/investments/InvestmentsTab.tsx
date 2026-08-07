@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { MetricCard } from '@/components/dashboard/MetricCard';
-import { Briefcase, TrendingUp, TrendingDown, Coins, Upload, Plus, Loader2 } from 'lucide-react';
+import { Briefcase, TrendingUp, TrendingDown, Coins, Upload, Plus } from 'lucide-react';
+import { DataState } from '@/components/common/DataState';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { InvestmentImportWizard } from './InvestmentImportWizard';
@@ -13,7 +14,7 @@ import { NetWorthChart } from '@/components/dashboard/NetWorthChart';
 import { getInvestmentTypeLabel } from '@/lib/constants';
 
 export function InvestmentsTab() {
-  const { investments, totalInvested, totalInitial, profit, initialLoading } = useInvestmentsContext();
+  const { investments, totalInvested, totalInitial, profit, initialLoading, loadError, refetch } = useInvestmentsContext();
   const { overallMetrics } = useFinancialMetrics();
   const [importOpen, setImportOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -51,11 +52,27 @@ export function InvestmentsTab() {
 
       <Card>
         <CardContent className="pt-6">
-          {initialLoading ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-          ) : (
+          <DataState
+            loading={initialLoading}
+            error={loadError}
+            isEmpty={investments.length === 0}
+            onRetry={refetch}
+            emptyIcon={Briefcase}
+            emptyTitle="Nenhum investimento cadastrado"
+            emptyDescription="Cadastre uma posição ou importe a planilha da sua corretora para começar."
+            emptyActions={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="outline" onClick={() => setImportOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" /> Importar Planilha
+                </Button>
+                <Button onClick={() => setFormOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" /> Novo Investimento
+                </Button>
+              </div>
+            }
+          >
             <InvestmentsTable />
-          )}
+          </DataState>
         </CardContent>
       </Card>
 

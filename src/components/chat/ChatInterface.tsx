@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { getCachedWebSearch, setCachedWebSearch } from '@/lib/webSearchCache';
+import { logger } from '@/lib/logger';
 
 const CHAT_TIMEOUT_MS = 60000;
 
@@ -300,7 +301,7 @@ export function ChatInterface() {
     // Check cache first
     const cached = getCachedWebSearch(query);
     if (cached) {
-      console.log('[Chat] web_search cache hit:', query);
+      logger.debug('[Chat] web_search cache hit:', query);
       await addMessage('assistant', JSON.stringify({
         message: `🌐 **Resultado da pesquisa:** _${query}_\n\n${cached}\n\n_ℹ️ Resultado do cache local — pode variar em tempo real._`,
         actions: [],
@@ -349,7 +350,7 @@ export function ChatInterface() {
       }
       case 'delete_transaction': {
         const ok = await deleteTransaction(action.payload.id);
-        if (ok) toast({ title: '🗑️ Transação excluída!' });
+        if (ok) toast({ title: 'Transação excluída!' });
         break;
       }
       case 'delete_all_transactions':
@@ -469,7 +470,7 @@ export function ChatInterface() {
         });
         if (user && edited.type !== 'investment' && edited.description && edited.category !== original.category) {
           await saveSingleLearnedMapping(user.id, edited.description, edited.category);
-          toast({ title: '🧠 Aprendi essa categoria!', description: 'Vou usar para próximas importações e mensagens.' });
+          toast({ title: 'Aprendi essa categoria!', description: 'Vou usar para próximas importações e mensagens.' });
         }
         setActiveIntent(null);
       }

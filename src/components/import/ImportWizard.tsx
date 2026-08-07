@@ -204,7 +204,7 @@ export function ImportWizard() {
         setImportRows(withDuplicates);
         setAiProgress('');
         setStep('duplicates');
-        toast({ title: `✅ ${normalized.length} transações extraídas do PDF` });
+        toast({ title: `${normalized.length} transações extraídas do PDF` });
       } catch (error) {
         toast({ title: 'Erro ao processar PDF', description: error instanceof Error ? error.message : 'Erro desconhecido', variant: 'destructive' });
         reset();
@@ -233,7 +233,7 @@ export function ImportWizard() {
         setImportRows(withDuplicates);
         setAiProgress('');
         setStep('duplicates');
-        toast({ title: `✅ ${normalized.length} transações extraídas do OFX` });
+        toast({ title: `${normalized.length} transações extraídas do OFX` });
       } catch (error) {
         toast({ title: 'Erro ao processar OFX', description: error instanceof Error ? error.message : 'Erro desconhecido', variant: 'destructive' });
         reset();
@@ -262,7 +262,7 @@ export function ImportWizard() {
         setImportRows(withDuplicates);
         setAiProgress('');
         setStep('duplicates');
-        toast({ title: `✅ ${normalized.length} transações extraídas do QIF` });
+        toast({ title: `${normalized.length} transações extraídas do QIF` });
       } catch (error) {
         toast({ title: 'Erro ao processar QIF', description: error instanceof Error ? error.message : 'Erro desconhecido', variant: 'destructive' });
         reset();
@@ -428,7 +428,7 @@ export function ImportWizard() {
       // Refresh mappings
       getUserCategoryMappings(user.id).then(setUserMappings);
 
-      toast({ title: `✅ ${count} transações importadas com sucesso!` });
+      toast({ title: `${count} transações importadas com sucesso!` });
       reset();
     } else {
       setIsImporting(false);
