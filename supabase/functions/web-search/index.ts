@@ -1,29 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
-  /^http:\/\/localhost(:\d+)?$/,
-  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/bot-financeiro\.lovable\.app$/,
-  /^https:\/\/([a-z0-9-]+\.)*lovable\.app$/,
-  /^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/,
-];
-
-const ALLOWED_HEADERS =
-  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
-
-function buildCors(req: Request): Record<string, string> {
-  const origin = req.headers.get("origin") ?? "";
-  const allowed = ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin));
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Headers": ALLOWED_HEADERS,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    Vary: "Origin",
-  };
-  if (allowed) headers["Access-Control-Allow-Origin"] = origin;
-  return headers;
-}
+import { buildCors, enforceRateLimit } from "../_shared/http.ts";
 
 /** Validates the caller's session token. Returns the user id or null. */
 async function verifyAuth(req: Request): Promise<string | null> {
@@ -570,7 +547,7 @@ REGRAS CRÍTICAS:
 // =====================================================================
 serve(async (req) => {
   const corsHeaders = buildCors(req);
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const userId = await verifyAuth(req);
   if (!userId) {
@@ -578,6 +555,9 @@ serve(async (req) => {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  const limited = enforceRateLimit("web-search", userId, 20, corsHeaders);
+  if (limited) return limited;
 
   try {
     const { query } = await req.json();
