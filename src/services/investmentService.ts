@@ -11,17 +11,32 @@ function castInvestment(row: Record<string, unknown>): Investment {
   } as Investment;
 }
 
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 50;
+
+/** Carrega todos os investimentos paginando no servidor (C1). */
 export async function fetchUserInvestments(userId: string): Promise<{ data: Investment[] | null; error: string | null }> {
   if (!userId) return { data: null, error: 'userId inválido' };
-  const { data, error } = await supabase
-    .from('investments')
-    .select('*')
-    .eq('user_id', userId)
-    .order('initial_amount', { ascending: false })
-    .limit(1000);
-  if (error) return { data: null, error: error.message };
-  return { data: (data || []).map(r => castInvestment(r as Record<string, unknown>)), error: null };
+
+  const all: Investment[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const { data, error } = await supabase
+      .from('investments')
+      .select('*')
+      .eq('user_id', userId)
+      .order('initial_amount', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error: error.message };
+    const rows = data ?? [];
+    all.push(...rows.map(r => castInvestment(r as Record<string, unknown>)));
+    if (rows.length < PAGE_SIZE) break;
+  }
+
+  return { data: all, error: null };
 }
+
 
 export async function insertInvestment(userId: string, input: InvestmentInput): Promise<{ data: Investment | null; error: string | null }> {
   const { data, error } = await supabase
