@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { buildCors, enforceRateLimit } from "../_shared/http.ts";
 
 const EXPENSE_CATS = ['alimentacao', 'transporte', 'moradia', 'saude', 'lazer', 'educacao', 'vestuario', 'assinaturas', 'outros_despesa'];
 const INCOME_CATS = ['salario', 'freelance', 'investimentos', 'vendas', 'outros_receita'];
@@ -36,7 +33,8 @@ REGRAS:
 - Sempre respeite o tipo: despesas só recebem categorias de despesa, receitas só de receita`;
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const corsHeaders = buildCors(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -49,6 +47,9 @@ serve(async (req) => {
     if (userErr || !userData?.user) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    const limited = enforceRateLimit("categorize-transactions", userData.user.id, 15, corsHeaders);
+    if (limited) return limited;
 
     const body = await req.json();
     const items = body?.items;

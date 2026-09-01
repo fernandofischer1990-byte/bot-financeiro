@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { buildCors, enforceRateLimit } from "../_shared/http.ts";
 
 const SYSTEM_PROMPT = `Você é um especialista em extrair transações financeiras de extratos bancários.
 
@@ -63,7 +60,7 @@ Formato de resposta:
 const MAX_BASE64_SIZE = 5 * 1024 * 1024 * 1.33;
 const MAX_TEXT_SIZE = 100000;
 
-function verifyAuth(req: Request): { token: string } | { error: Response } {
+function verifyAuth(req: Request, corsHeaders: Record<string, string>): { token: string } | { error: Response } {
   const authHeader = req.headers.get("Authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {
@@ -78,7 +75,7 @@ function verifyAuth(req: Request): { token: string } | { error: Response } {
   return { token: authHeader.replace("Bearer ", "") };
 }
 
-async function getAuthenticatedUserId(token: string): Promise<{ userId: string } | { error: Response }> {
+async function getAuthenticatedUserId(token: string, corsHeaders: Record<string, string>): Promise<{ userId: string } | { error: Response }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
@@ -110,16 +107,18 @@ async function getAuthenticatedUserId(token: string): Promise<{ userId: string }
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsHeaders = buildCors(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const authCheck = verifyAuth(req);
+    const authCheck = verifyAuth(req, corsHeaders);
     if ("error" in authCheck) return authCheck.error;
 
-    const authResult = await getAuthenticatedUserId(authCheck.token);
+    const authResult = await getAuthenticatedUserId(authCheck.token, corsHeaders);
     if ("error" in authResult) return authResult.error;
+
+    const limited = enforceRateLimit("parse-statement", authResult.userId, 6, corsHeaders);
+    if (limited) return limited;
 
     const { pdfBase64, pdfText } = await req.json();
 
