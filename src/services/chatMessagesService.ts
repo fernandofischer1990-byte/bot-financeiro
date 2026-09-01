@@ -9,6 +9,9 @@ export interface ChatMessageRow {
   created_at: string;
 }
 
+/** Últimas N mensagens carregadas no chat (A5). */
+export const CHAT_HISTORY_LIMIT = 300;
+
 export async function fetchChatMessages(userId: string): Promise<{ data: ChatMessageRow[] | null; error: string | null }> {
   if (!userId) return { data: null, error: 'userId inválido' };
 
@@ -16,18 +19,23 @@ export async function fetchChatMessages(userId: string): Promise<{ data: ChatMes
     .from('chat_messages')
     .select('*')
     .eq('user_id', userId)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(CHAT_HISTORY_LIMIT);
 
   if (error) return { data: null, error: error.message };
 
-  const mapped: ChatMessageRow[] = (data || []).map(msg => ({
-    ...msg,
-    role: msg.role as 'user' | 'assistant',
-    metadata: msg.metadata as Record<string, unknown> | null,
-  }));
+  const mapped: ChatMessageRow[] = (data || [])
+    .map(msg => ({
+      ...msg,
+      role: msg.role as 'user' | 'assistant',
+      metadata: msg.metadata as Record<string, unknown> | null,
+    }))
+    .reverse(); // volta à ordem cronológica para renderização
 
   return { data: mapped, error: null };
 }
+
 
 export async function insertChatMessage(
   userId: string,
