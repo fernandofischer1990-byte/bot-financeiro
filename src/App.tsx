@@ -23,35 +23,38 @@ const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 
 const App = () => (
-  <ThemeProvider>
-    <AuthProvider>
-      <TransactionsProvider>
-        <InvestmentsProvider>
-          <TooltipProvider>
-            <Toaster />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
-                <Route element={<RequireAuth />}>
-                  <Route element={<AppLayout />}>
-                    <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/investimentos" element={<InvestmentsPage />} />
-                    <Route path="/chat" element={<ChatPage />} />
-                    <Route path="/adicionar" element={<AddTransactionPage />} />
-                    <Route path="/importar" element={<ImportPage />} />
-                    <Route path="/relatorios" element={<ReportsPage />} />
-                    <Route path="/historico" element={<HistoryPage />} />
+  <ErrorBoundary>
+    <ThemeProvider>
+      <AuthProvider>
+        <TransactionsProvider>
+          <InvestmentsProvider>
+            <TooltipProvider>
+              <Toaster />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+                  <Route element={<RequireAuth />}>
+                    <Route element={<AppLayout />}>
+                      <Route index element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/investimentos" element={<InvestmentsPage />} />
+                      <Route path="/chat" element={<ChatPage />} />
+                      <Route path="/adicionar" element={<AddTransactionPage />} />
+                      <Route path="/importar" element={<ImportPage />} />
+                      <Route path="/relatorios" element={<ReportsPage />} />
+                      <Route path="/historico" element={<HistoryPage />} />
+                    </Route>
                   </Route>
-                </Route>
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </InvestmentsProvider>
-      </TransactionsProvider>
-    </AuthProvider>
-  </ThemeProvider>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </InvestmentsProvider>
+        </TransactionsProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  </ErrorBoundary>
 );
+
 
 export default App;
