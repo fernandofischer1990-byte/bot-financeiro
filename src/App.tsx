@@ -8,7 +8,9 @@ import { TransactionsProvider } from "@/contexts/TransactionsContext";
 import { InvestmentsProvider } from "@/contexts/InvestmentsContext";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import NotFound from "./pages/NotFound";
+
 import OAuthConsent from "./pages/OAuthConsent";
 
 // Code-splitting por rota: mantém o chunk inicial enxuto (recharts/xlsx só entram sob demanda).
