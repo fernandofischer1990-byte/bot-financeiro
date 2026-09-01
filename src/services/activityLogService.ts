@@ -151,7 +151,6 @@ export async function fetchActivityLog(
 }
 
 
-export async function clearActivityLog(userId: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.from('activity_log').delete().eq('user_id', userId);
-  return { error: error?.message ?? null };
-}
+// O histórico de auditoria é append-only (C2): não há remoção nem edição
+// de registros, nem pelo próprio usuário.
+
