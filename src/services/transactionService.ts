@@ -18,33 +18,52 @@ function castTransaction(tx: Record<string, unknown>): Transaction {
   } as Transaction;
 }
 
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 50; // teto de segurança: 50.000 transações
+
+const TX_COLUMNS =
+  "id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,financial_scope,investment_operation,investment_type,institution,tax_id,irpf_category,receipt_url";
+
+/**
+ * Carrega TODAS as transações do usuário paginando no servidor (C1).
+ * Evita o corte silencioso em 1.000 registros que distorcia as métricas.
+ */
 export async function fetchUserTransactions(userId: string): Promise<{ data: Transaction[] | null; error: string | null }> {
   if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
     return { data: null, error: 'userId inválido' };
   }
 
   try {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select("id,type,amount,category,description,transaction_date,source,created_at,updated_at,user_id,financial_scope,investment_operation,investment_type,institution,tax_id,irpf_category,receipt_url")
-      .eq('user_id', userId)
-      .order('transaction_date', { ascending: false })
-      .limit(1000);
+    const all: Transaction[] = [];
 
-    if (error) {
-      return { data: null, error: error.message || 'Erro ao carregar transações' };
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const from = page * PAGE_SIZE;
+      const { data, error } = await supabase
+        .from('transactions')
+        .select(TX_COLUMNS)
+        .eq('user_id', userId)
+        .order('transaction_date', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        return { data: null, error: error.message || 'Erro ao carregar transações' };
+      }
+      if (data === null || data === undefined) {
+        return { data: null, error: 'Resposta inesperada do servidor' };
+      }
+
+      all.push(...data.map(castTransaction));
+      if (data.length < PAGE_SIZE) break;
     }
 
-    if (data === null || data === undefined) {
-      return { data: null, error: 'Resposta inesperada do servidor' };
-    }
-
-    return { data: data.map(castTransaction), error: null };
+    return { data: all, error: null };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Falha de rede. Tente novamente.';
     return { data: null, error: msg };
   }
 }
+
 
 export async function insertTransaction(
   userId: string,
