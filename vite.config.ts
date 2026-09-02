@@ -21,6 +21,9 @@ export default defineConfig(({ mode }) => ({
       output: {
         // Bibliotecas pesadas ficam em chunks próprios, carregados só nas rotas que as usam.
         manualChunks: {
+          // React fica isolado: sem isso o rollup o embute no chunk de gráficos,
+          // que passa a ser carregado na rota inicial.
+          react: ["react", "react-dom", "react/jsx-runtime", "react-router-dom"],
           charts: ["recharts"],
           spreadsheet: ["@e965/xlsx"],
           supabase: ["@supabase/supabase-js"],
