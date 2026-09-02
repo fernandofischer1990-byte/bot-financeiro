@@ -20,13 +20,17 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         // Bibliotecas pesadas ficam em chunks próprios, carregados só nas rotas que as usam.
-        manualChunks: {
-          // React fica isolado: sem isso o rollup o embute no chunk de gráficos,
-          // que passa a ser carregado na rota inicial.
-          react: ["react", "react-dom", "react/jsx-runtime", "react-router-dom"],
-          charts: ["recharts"],
-          spreadsheet: ["@e965/xlsx"],
-          supabase: ["@supabase/supabase-js"],
+        // Forma de função: utilitários compartilhados vão para `vendor` em vez de
+        // serem embutidos no chunk de gráficos (o que o arrastava para a rota inicial).
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (/[\\/]node_modules[\\/](recharts|d3-|victory-vendor|internmap|delaunator|robust-predicates)/.test(id))
+            return "charts";
+          if (/[\\/]node_modules[\\/]@e965[\\/]xlsx/.test(id)) return "spreadsheet";
+          if (/[\\/]node_modules[\\/]@supabase[\\/]/.test(id)) return "supabase";
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/.test(id))
+            return "react";
+          return "vendor";
         },
       },
     },
