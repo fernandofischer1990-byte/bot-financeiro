@@ -29,7 +29,7 @@ jobs:
         run: npm run test:ci
 
   bundle-budget:
-    name: Orçamento do chunk inicial (< 400 kB)
+    name: Orçamento do chunk inicial (< 300 kB gzip)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,4 +47,4 @@ jobs:
       - name: Verificar chunk inicial
         run: npm run check:bundle
         env:
-          INITIAL_CHUNK_LIMIT_KB: 400
+          INITIAL_CHUNK_LIMIT_KB: 300

@@ -9,7 +9,10 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 
 const DIST = path.resolve("dist");
-const LIMIT_KB = Number(process.env.INITIAL_CHUNK_LIMIT_KB ?? 400);
+// Orçamento medido em gzip (o que o usuário realmente baixa).
+const LIMIT_KB = Number(process.env.INITIAL_CHUNK_LIMIT_KB ?? 300);
+// Chunks pesados que precisam ficar fora da rota inicial.
+const MUST_BE_LAZY = ["charts", "spreadsheet"];
 
 if (!existsSync(path.join(DIST, "index.html"))) {
   console.error("dist/index.html não encontrado — rode `npm run build` antes.");
@@ -49,12 +52,24 @@ const kb = (n) => (n / 1024).toFixed(1) + " kB";
 console.log("Chunks da rota inicial:");
 for (const r of rows) console.log(`  ${r.file}  ${kb(r.raw)} (gzip ${kb(r.gz)})`);
 console.log(`Total inicial: ${kb(rawTotal)} (gzip ${kb(gzipTotal)})`);
-console.log(`Limite: ${LIMIT_KB} kB (bruto)`);
+console.log(`Limite: ${LIMIT_KB} kB (gzip)`);
 
-if (rawTotal / 1024 > LIMIT_KB) {
-  console.error(
-    `\nFALHA: chunk inicial de ${kb(rawTotal)} excede o orçamento de ${LIMIT_KB} kB.`
-  );
-  process.exit(1);
+let failed = false;
+
+const eager = MUST_BE_LAZY.filter((name) =>
+  rows.some((r) => path.basename(r.file).startsWith(name + "-"))
+);
+if (eager.length > 0) {
+  console.error(`\nFALHA: chunks que deveriam ser lazy estão na rota inicial: ${eager.join(", ")}`);
+  failed = true;
 }
+
+if (gzipTotal / 1024 > LIMIT_KB) {
+  console.error(
+    `\nFALHA: chunk inicial de ${kb(gzipTotal)} (gzip) excede o orçamento de ${LIMIT_KB} kB.`
+  );
+  failed = true;
+}
+
+if (failed) process.exit(1);
 console.log("\nOK: chunk inicial dentro do orçamento.");
