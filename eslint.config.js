@@ -40,6 +40,13 @@ export default tseslint.config(
     },
   },
   {
+    // Componentes shadcn/ui mantêm interfaces de repasse vazias
+    files: ["src/components/ui/**/*.tsx"],
+    rules: {
+      "@typescript-eslint/no-empty-object-type": "off",
+    },
+  },
+  {
     files: ["*.config.ts", "*.config.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
