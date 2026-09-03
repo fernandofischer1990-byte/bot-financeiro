@@ -24,7 +24,9 @@ jobs:
         run: npx tsc --noEmit
       - name: Lint (bloqueante — zero erros)
         run: npm run lint
-      - name: Testes (inclui paginação de transações e do chat)
+      - name: Testes de paginação (transações, investimentos e chat) — bloqueante
+        run: npx vitest run src/services/__tests__/pagination.test.ts
+      - name: Suíte completa de testes — bloqueante
         run: npm run test:ci
 
   bundle-budget:
