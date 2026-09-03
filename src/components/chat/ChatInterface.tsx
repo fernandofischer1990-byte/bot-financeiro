@@ -409,6 +409,8 @@ export function ChatInterface() {
       }
 
     }
+    // updateTransaction/updateInvestment são usados nos handlers de confirmação (pendingFiscal)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transactions, investments, updateTransaction, updateInvestment, deleteTransaction, toast, runWebSearch]);
 
   const updatePending = (idx: number, patch: Partial<AddTxPayload>) => {

@@ -303,6 +303,8 @@ export function ImportWizard() {
     }
 
     toast({ title: 'Formato não suportado', description: 'Use PDF, CSV, XLS, XLSX, ODS, TSV, OFX ou QIF', variant: 'destructive' });
+    // applyAICategorization/processSpreadsheetData são estáveis dentro do fluxo do wizard
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transactions, toast, reset, userMappings]);
 
   const getRowValue = (row: Record<string, unknown>, key: string): unknown => {

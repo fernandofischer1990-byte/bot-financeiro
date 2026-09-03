@@ -22,9 +22,8 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
-      - name: Lint
+      - name: Lint (bloqueante — zero erros)
         run: npm run lint
-        continue-on-error: true
       - name: Testes (inclui paginação de transações e do chat)
         run: npm run test:ci
 

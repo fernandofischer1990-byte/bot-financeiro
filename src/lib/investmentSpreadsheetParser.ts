@@ -88,8 +88,8 @@ function parseDateLike(v: unknown): string | null {
   // dd/mm/yyyy
   const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (br) {
-    let [, d, m, y] = br;
-    if (y.length === 2) y = '20' + y;
+    const [, d, m, rawY] = br;
+    const y = rawY.length === 2 ? '20' + rawY : rawY;
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
   // yyyy-mm-dd already

@@ -93,7 +93,7 @@ export function normalizeToLocalDate(value: unknown): string {
   }
   
   // Brazilian format DD/MM/YYYY or DD-MM-YYYY
-  const brMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  const brMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (brMatch) {
     const [, day, month, year] = brMatch;
     const d = day.padStart(2, '0');
