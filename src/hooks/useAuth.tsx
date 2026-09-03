@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             setSession(null);
             setUser(null);
-            try { await supabase.auth.signOut({ scope: 'local' }); } catch {}
+            try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* logout local best-effort */ }
           }
           return;
         }
