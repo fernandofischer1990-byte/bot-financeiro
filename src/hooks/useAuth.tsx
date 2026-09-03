@@ -86,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
+    // toast é estável (hook singleton); o efeito deve rodar apenas na montagem
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signUp = async (email: string, password: string, fullName?: string) => {

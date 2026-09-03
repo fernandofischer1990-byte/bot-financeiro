@@ -335,6 +335,8 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       logger.debug(`[Transactions] Auth resolved — user: ${user?.id ?? 'none'}`);
       fetchTransactions();
     }
+    // fetchTransactions já depende de user; incluir user?.id causaria refetch duplicado
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, fetchTransactions]);
 
   // Realtime — reflect external mutations (e.g. via MCP) in the dashboard
