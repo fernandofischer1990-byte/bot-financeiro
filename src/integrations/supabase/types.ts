@@ -320,10 +320,12 @@ export type Database = {
           category: string
           created_at: string
           description: string | null
-          financial_scope: string
+          financial_scope: Database["public"]["Enums"]["financial_scope_type"]
           id: string
           institution: string | null
-          investment_operation: string | null
+          investment_operation:
+            | Database["public"]["Enums"]["investment_operation_type"]
+            | null
           investment_type: string | null
           irpf_category: string | null
           receipt_url: string | null
@@ -339,10 +341,12 @@ export type Database = {
           category: string
           created_at?: string
           description?: string | null
-          financial_scope?: string
+          financial_scope?: Database["public"]["Enums"]["financial_scope_type"]
           id?: string
           institution?: string | null
-          investment_operation?: string | null
+          investment_operation?:
+            | Database["public"]["Enums"]["investment_operation_type"]
+            | null
           investment_type?: string | null
           irpf_category?: string | null
           receipt_url?: string | null
@@ -358,10 +362,12 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string | null
-          financial_scope?: string
+          financial_scope?: Database["public"]["Enums"]["financial_scope_type"]
           id?: string
           institution?: string | null
-          investment_operation?: string | null
+          investment_operation?:
+            | Database["public"]["Enums"]["investment_operation_type"]
+            | null
           investment_type?: string | null
           irpf_category?: string | null
           receipt_url?: string | null
@@ -379,7 +385,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_financial_metrics: {
+        Args: { p_end?: string; p_start?: string }
+        Returns: Json
+      }
     }
     Enums: {
       expense_category:
@@ -392,11 +401,13 @@ export type Database = {
         | "vestuario"
         | "assinaturas"
         | "outros_despesa"
+      financial_scope_type: "operational" | "investment"
       income_category:
         | "salario"
         | "freelance"
         | "investimentos"
         | "outros_receita"
+      investment_operation_type: "deposit" | "withdraw" | "yield" | "loss"
       transaction_type: "income" | "expense" | "investment"
     }
     CompositeTypes: {
@@ -536,12 +547,14 @@ export const Constants = {
         "assinaturas",
         "outros_despesa",
       ],
+      financial_scope_type: ["operational", "investment"],
       income_category: [
         "salario",
         "freelance",
         "investimentos",
         "outros_receita",
       ],
+      investment_operation_type: ["deposit", "withdraw", "yield", "loss"],
       transaction_type: ["income", "expense", "investment"],
     },
   },
