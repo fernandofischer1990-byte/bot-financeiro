@@ -46,7 +46,7 @@ export function getOperationalMonthTotals(txs: Transaction[], monthKey: string):
   return { income, expenses, balance: income - expenses };
 }
 
-function monthLabel(monthKey: string): string {
+export function monthLabel(monthKey: string): string {
   const [year, month] = monthKey.split('-').map(Number);
   return format(new Date(year, (month || 1) - 1, 1), 'MMM/yy', { locale: ptBR });
 }
