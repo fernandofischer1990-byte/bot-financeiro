@@ -1,11 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { buildCors, enforceRateLimit } from "../_shared/http.ts";
-
-const MAX_MESSAGE_LENGTH = 10000;
-const MAX_MESSAGES = 50;
-const MAX_CONTEXT_SIZE = 20000;
+import {
+  buildCors,
+  enforceRateLimit,
+  errorResponse,
+  getRequestId,
+  logEvent,
+  parseJsonBody,
+  withRequestId,
+} from "../_shared/http.ts";
+import { chatRequestSchema, MAX_CONTEXT_SIZE } from "../_shared/schemas.ts";
 
 const SYSTEM_PROMPT = `Você é o FinBot Copilot, um assistente financeiro inteligente integrado a um sistema de gestão de finanças pessoais para usuários brasileiros.
 
