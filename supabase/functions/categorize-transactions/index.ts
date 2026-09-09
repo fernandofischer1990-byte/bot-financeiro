@@ -157,9 +157,14 @@ serve(async (req) => {
       return false;
     });
 
-    return new Response(JSON.stringify({ results: validResults }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return jsonResponse({ results: validResults }, 200, corsHeaders);
   } catch (e) {
-    console.error("categorize-transactions error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    logEvent(
+      "error",
+      "categorize-transactions",
+      requestId,
+      e instanceof Error ? e.message : String(e),
+    );
+    return errorResponse("Erro ao classificar transações", 500, corsHeaders);
   }
 });
