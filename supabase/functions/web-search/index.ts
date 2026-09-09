@@ -1,6 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildCors, enforceRateLimit } from "../_shared/http.ts";
+import {
+  buildCors,
+  enforceRateLimit,
+  errorResponse,
+  getRequestId,
+  jsonResponse,
+  logEvent,
+  parseJsonBody,
+  withRequestId,
+} from "../_shared/http.ts";
+import { webSearchSchema } from "../_shared/schemas.ts";
 
 /** Validates the caller's session token. Returns the user id or null. */
 async function verifyAuth(req: Request): Promise<string | null> {
