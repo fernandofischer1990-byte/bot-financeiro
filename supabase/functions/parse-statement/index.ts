@@ -1,7 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { buildCors, enforceRateLimit } from "../_shared/http.ts";
+import {
+  buildCors,
+  enforceRateLimit,
+  errorResponse,
+  getRequestId,
+  jsonResponse,
+  logEvent,
+  parseJsonBody,
+  withRequestId,
+} from "../_shared/http.ts";
+import { parseStatementSchema } from "../_shared/schemas.ts";
 
 const SYSTEM_PROMPT = `Você é um especialista em extrair transações financeiras de extratos bancários.
 

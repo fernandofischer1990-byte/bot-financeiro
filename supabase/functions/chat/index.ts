@@ -384,7 +384,7 @@ Dados parciais: ${JSON.stringify(context.active_intent.partial || {})}`;
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("Chat error:", e);
-    return new Response(JSON.stringify({ error: "Erro ao processar sua mensagem" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    logEvent("error", "chat", requestId, e instanceof Error ? e.message : String(e));
+    return errorResponse("Erro ao processar sua mensagem", 500, corsHeaders);
   }
 });
