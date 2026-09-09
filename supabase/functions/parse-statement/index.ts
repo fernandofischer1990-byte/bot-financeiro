@@ -115,7 +115,8 @@ async function getAuthenticatedUserId(token: string, corsHeaders: Record<string,
 }
 
 serve(async (req) => {
-  const corsHeaders = buildCors(req);
+  const requestId = getRequestId(req);
+  const corsHeaders = withRequestId(buildCors(req), requestId);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -128,19 +129,16 @@ serve(async (req) => {
     const limited = enforceRateLimit("parse-statement", authResult.userId, 6, corsHeaders);
     if (limited) return limited;
 
-    const { pdfBase64, pdfText } = await req.json();
-
-    if (pdfBase64 && pdfBase64.length > MAX_BASE64_SIZE) {
-      return new Response(JSON.stringify({ error: "PDF muito grande. Tamanho máximo: 5MB" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const parsed = await parseJsonBody(req, parseStatementSchema, corsHeaders);
+    if ("error" in parsed) {
+      logEvent("info", "parse-statement", requestId, "corpo inválido");
+      return parsed.error;
     }
+    const { pdfBase64, pdfText } = parsed.data;
+    logEvent("info", "parse-statement", requestId, "requisição aceita", {
+      mode: pdfText ? "text" : "pdf",
+    });
 
-    if (pdfText && pdfText.length > MAX_TEXT_SIZE) {
-      return new Response(JSON.stringify({ error: "Texto muito longo. Tamanho máximo: 100KB" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (!pdfBase64 && !pdfText) {
-      return new Response(JSON.stringify({ error: "PDF base64 ou texto é obrigatório" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
