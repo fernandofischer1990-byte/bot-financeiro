@@ -67,8 +67,6 @@ Formato de resposta:
   }
 }`;
 
-const MAX_BASE64_SIZE = 5 * 1024 * 1024 * 1.33;
-const MAX_TEXT_SIZE = 100000;
 
 function verifyAuth(req: Request, corsHeaders: Record<string, string>): { token: string } | { error: Response } {
   const authHeader = req.headers.get("Authorization");
