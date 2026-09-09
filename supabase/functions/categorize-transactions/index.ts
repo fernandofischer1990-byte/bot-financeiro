@@ -63,21 +63,21 @@ serve(async (req) => {
     const limited = enforceRateLimit("categorize-transactions", userData.user.id, 15, corsHeaders);
     if (limited) return limited;
 
-    const body = await req.json();
-    const items = body?.items;
-    if (!Array.isArray(items) || items.length === 0) {
-      return new Response(JSON.stringify({ error: "items é obrigatório" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const parsedBody = await parseJsonBody(req, categorizeSchema, corsHeaders);
+    if ("error" in parsedBody) {
+      logEvent("info", "categorize-transactions", requestId, "corpo inválido");
+      return parsedBody.error;
     }
-    if (items.length > 200) {
-      return new Response(JSON.stringify({ error: "Máximo 200 itens por chamada" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const items = parsedBody.data.items;
 
-    // Sanitize items
-    const sanitized = items.map((it: any, i: number) => ({
-      index: typeof it.index === 'number' ? it.index : i,
-      description: String(it.description || '').slice(0, 200),
-      type: it.type === 'income' ? 'income' : 'expense',
+    const sanitized = items.map((it, i) => ({
+      index: typeof it.index === "number" ? it.index : i,
+      description: String(it.description || "").slice(0, 200),
+      type: it.type === "income" ? "income" : "expense",
     }));
+    logEvent("info", "categorize-transactions", requestId, "requisição aceita", {
+      items: sanitized.length,
+    });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
