@@ -556,63 +556,51 @@ REGRAS CRÍTICAS:
 // HTTP entrypoint
 // =====================================================================
 serve(async (req) => {
-  const corsHeaders = buildCors(req);
+  const requestId = getRequestId(req);
+  const corsHeaders = withRequestId(buildCors(req), requestId);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const userId = await verifyAuth(req);
-  if (!userId) {
-    return new Response(JSON.stringify({ error: "Não autorizado" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!userId) return errorResponse("Não autorizado", 401, corsHeaders);
 
   const limited = enforceRateLimit("web-search", userId, 20, corsHeaders);
   if (limited) return limited;
 
   try {
-    const { query } = await req.json();
-
-    if (!query || typeof query !== "string" || query.length > 500) {
-      return new Response(JSON.stringify({ error: "Query inválida" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const parsed = await parseJsonBody(req, webSearchSchema, corsHeaders);
+    if ("error" in parsed) {
+      logEvent("info", "web-search", requestId, "corpo inválido");
+      return parsed.error;
     }
+    const { query } = parsed.data;
 
-    console.log("[web-search] query:", query);
+    logEvent("info", "web-search", requestId, "consulta recebida", { length: query.length });
 
     const live = await routeQuery(query);
-    if (live) {
-      return new Response(JSON.stringify({ result: live, source: "live" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (live) return jsonResponse({ result: live, source: "live" }, 200, corsHeaders);
 
     try {
       const result = await llmFallback(query);
-      return new Response(JSON.stringify({ result, source: "llm" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ result, source: "llm" }, 200, corsHeaders);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "ai_error";
-      if (msg === "rate_limit") {
-        return new Response(JSON.stringify({ error: "Rate limit excedido" }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (msg === "rate_limit") return errorResponse("Rate limit excedido", 429, corsHeaders);
       if (msg === "payment_required") {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes" }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse("Créditos insuficientes", 402, corsHeaders);
       }
-      return new Response(
-        JSON.stringify({ result: "Não consegui consultar uma fonte atualizada neste momento. Tente novamente em alguns instantes.", source: "fallback" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      logEvent("error", "web-search", requestId, `fallback de IA falhou: ${msg}`);
+      return jsonResponse(
+        {
+          result:
+            "Não consegui consultar uma fonte atualizada neste momento. Tente novamente em alguns instantes.",
+          source: "fallback",
+        },
+        200,
+        corsHeaders,
       );
     }
   } catch (e) {
-    console.error("web-search error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    logEvent("error", "web-search", requestId, e instanceof Error ? e.message : String(e));
+    return errorResponse("Erro ao consultar fontes externas", 500, corsHeaders);
   }
 });
