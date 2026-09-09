@@ -129,7 +129,10 @@ serve(async (req) => {
       if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Limite de requisições. Tente em alguns instantes." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       if (aiResp.status === 402) return new Response(JSON.stringify({ error: "Créditos de IA insuficientes." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const t = await aiResp.text();
-      console.error("AI gateway error:", aiResp.status, t);
+      logEvent("error", "categorize-transactions", requestId, "falha no gateway de IA", {
+        status: aiResp.status,
+        body: t.slice(0, 500),
+      });
       return new Response(JSON.stringify({ error: "Erro ao chamar IA" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
