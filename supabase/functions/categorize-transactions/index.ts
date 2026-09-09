@@ -43,8 +43,10 @@ REGRAS:
 - Sempre respeite o tipo: despesas só recebem categorias de despesa, receitas só de receita`;
 
 serve(async (req) => {
-  const corsHeaders = buildCors(req);
+  const requestId = getRequestId(req);
+  const corsHeaders = withRequestId(buildCors(req), requestId);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
 
   try {
     const authHeader = req.headers.get("Authorization");
