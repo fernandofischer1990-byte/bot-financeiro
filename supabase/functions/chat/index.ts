@@ -1,11 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { buildCors, enforceRateLimit } from "../_shared/http.ts";
-
-const MAX_MESSAGE_LENGTH = 10000;
-const MAX_MESSAGES = 50;
-const MAX_CONTEXT_SIZE = 20000;
+import {
+  buildCors,
+  enforceRateLimit,
+  errorResponse,
+  getRequestId,
+  logEvent,
+  parseJsonBody,
+  withRequestId,
+} from "../_shared/http.ts";
+import { chatRequestSchema, MAX_CONTEXT_SIZE } from "../_shared/schemas.ts";
 
 const SYSTEM_PROMPT = `Você é o FinBot Copilot, um assistente financeiro inteligente integrado a um sistema de gestão de finanças pessoais para usuários brasileiros.
 
@@ -249,7 +254,8 @@ async function getAuthenticatedUserId(token: string, corsHeaders: Record<string,
 }
 
 serve(async (req) => {
-  const corsHeaders = buildCors(req);
+  const requestId = getRequestId(req);
+  const corsHeaders = withRequestId(buildCors(req), requestId);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -261,22 +267,18 @@ serve(async (req) => {
     const limited = enforceRateLimit("chat", authResult.userId, 30, corsHeaders);
     if (limited) return limited;
 
-    const { messages, context } = await req.json();
+    const parsed = await parseJsonBody(req, chatRequestSchema, corsHeaders);
+    if ("error" in parsed) {
+      logEvent("info", "chat", requestId, "corpo inválido");
+      return parsed.error;
+    }
+    const { messages, context } = parsed.data;
 
-    if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: "Mensagens inválidas" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (messages.length > MAX_MESSAGES) {
-      return new Response(JSON.stringify({ error: "Muitas mensagens no histórico" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    for (const msg of messages) {
-      if (!msg?.role || !msg?.content || typeof msg.content !== 'string' || msg.content.length > MAX_MESSAGE_LENGTH || !['user', 'assistant', 'system'].includes(msg.role)) {
-        return new Response(JSON.stringify({ error: "Formato de mensagem inválido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-    }
     if (context && JSON.stringify(context).length > MAX_CONTEXT_SIZE) {
-      return new Response(JSON.stringify({ error: "Dados de contexto muito grandes" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return errorResponse("Dados de contexto muito grandes", 400, corsHeaders);
     }
+
+    logEvent("info", "chat", requestId, "requisição aceita", { messages: messages.length });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -382,7 +384,7 @@ Dados parciais: ${JSON.stringify(context.active_intent.partial || {})}`;
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("Chat error:", e);
-    return new Response(JSON.stringify({ error: "Erro ao processar sua mensagem" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    logEvent("error", "chat", requestId, e instanceof Error ? e.message : String(e));
+    return errorResponse("Erro ao processar sua mensagem", 500, corsHeaders);
   }
 });

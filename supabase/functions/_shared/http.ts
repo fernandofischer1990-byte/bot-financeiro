@@ -55,6 +55,67 @@ export function preflight(req: Request, cors: Record<string, string>): Response 
 }
 
 // ---------------------------------------------------------------------------
+// Request id + logging estruturado (M9)
+// ---------------------------------------------------------------------------
+
+/** Reaproveita o id enviado pelo cliente ou gera um novo. */
+export function getRequestId(req: Request): string {
+  const incoming = req.headers.get("x-request-id");
+  if (incoming && /^[A-Za-z0-9_-]{6,64}$/.test(incoming)) return incoming;
+  return crypto.randomUUID();
+}
+
+/** Anexa o request-id aos headers de resposta (CORS + expose). */
+export function withRequestId(
+  cors: Record<string, string>,
+  requestId: string,
+): Record<string, string> {
+  return {
+    ...cors,
+    "x-request-id": requestId,
+    "Access-Control-Expose-Headers": "x-request-id",
+  };
+}
+
+export function logEvent(
+  level: "info" | "error",
+  fn: string,
+  requestId: string,
+  message: string,
+  extra: Record<string, unknown> = {},
+): void {
+  const line = JSON.stringify({ level, fn, request_id: requestId, message, ...extra });
+  if (level === "error") console.error(line);
+  else console.log(line);
+}
+
+/** Valida o corpo JSON com um schema Zod-like (`safeParse`). */
+export async function parseJsonBody<T>(
+  req: Request,
+  schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: unknown } },
+  cors: Record<string, string>,
+): Promise<{ data: T } | { error: Response }> {
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return { error: errorResponse("Corpo da requisição não é JSON válido", 400, cors) };
+  }
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    const err = result.error as { issues?: Array<{ path: unknown[]; message: string }> };
+    const details = (err.issues ?? []).slice(0, 8).map((i) => ({
+      field: Array.isArray(i.path) ? i.path.join(".") : String(i.path),
+      message: i.message,
+    }));
+    return {
+      error: jsonResponse({ error: "Dados inválidos na requisição", details }, 400, cors),
+    };
+  }
+  return { data: result.data };
+}
+
+// ---------------------------------------------------------------------------
 // Rate limiting (janela deslizante, por instância da function)
 // ---------------------------------------------------------------------------
 

@@ -1,7 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { buildCors, enforceRateLimit } from "../_shared/http.ts";
+import {
+  buildCors,
+  enforceRateLimit,
+  errorResponse,
+  getRequestId,
+  jsonResponse,
+  logEvent,
+  parseJsonBody,
+  withRequestId,
+} from "../_shared/http.ts";
+import { categorizeSchema } from "../_shared/schemas.ts";
 
 const EXPENSE_CATS = ['alimentacao', 'transporte', 'moradia', 'saude', 'lazer', 'educacao', 'vestuario', 'assinaturas', 'outros_despesa'];
 const INCOME_CATS = ['salario', 'freelance', 'investimentos', 'vendas', 'outros_receita'];
@@ -33,8 +43,10 @@ REGRAS:
 - Sempre respeite o tipo: despesas só recebem categorias de despesa, receitas só de receita`;
 
 serve(async (req) => {
-  const corsHeaders = buildCors(req);
+  const requestId = getRequestId(req);
+  const corsHeaders = withRequestId(buildCors(req), requestId);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -51,21 +63,21 @@ serve(async (req) => {
     const limited = enforceRateLimit("categorize-transactions", userData.user.id, 15, corsHeaders);
     if (limited) return limited;
 
-    const body = await req.json();
-    const items = body?.items;
-    if (!Array.isArray(items) || items.length === 0) {
-      return new Response(JSON.stringify({ error: "items é obrigatório" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const parsedBody = await parseJsonBody(req, categorizeSchema, corsHeaders);
+    if ("error" in parsedBody) {
+      logEvent("info", "categorize-transactions", requestId, "corpo inválido");
+      return parsedBody.error;
     }
-    if (items.length > 200) {
-      return new Response(JSON.stringify({ error: "Máximo 200 itens por chamada" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const items = parsedBody.data.items;
 
-    // Sanitize items
-    const sanitized = items.map((it: any, i: number) => ({
-      index: typeof it.index === 'number' ? it.index : i,
-      description: String(it.description || '').slice(0, 200),
-      type: it.type === 'income' ? 'income' : 'expense',
+    const sanitized = items.map((it, i) => ({
+      index: typeof it.index === "number" ? it.index : i,
+      description: String(it.description || "").slice(0, 200),
+      type: it.type === "income" ? "income" : "expense",
     }));
+    logEvent("info", "categorize-transactions", requestId, "requisição aceita", {
+      items: sanitized.length,
+    });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -117,7 +129,10 @@ serve(async (req) => {
       if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Limite de requisições. Tente em alguns instantes." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       if (aiResp.status === 402) return new Response(JSON.stringify({ error: "Créditos de IA insuficientes." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const t = await aiResp.text();
-      console.error("AI gateway error:", aiResp.status, t);
+      logEvent("error", "categorize-transactions", requestId, "falha no gateway de IA", {
+        status: aiResp.status,
+        body: t.slice(0, 500),
+      });
       return new Response(JSON.stringify({ error: "Erro ao chamar IA" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -142,9 +157,14 @@ serve(async (req) => {
       return false;
     });
 
-    return new Response(JSON.stringify({ results: validResults }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return jsonResponse({ results: validResults }, 200, corsHeaders);
   } catch (e) {
-    console.error("categorize-transactions error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    logEvent(
+      "error",
+      "categorize-transactions",
+      requestId,
+      e instanceof Error ? e.message : String(e),
+    );
+    return errorResponse("Erro ao classificar transações", 500, corsHeaders);
   }
 });

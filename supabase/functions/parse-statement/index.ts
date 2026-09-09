@@ -1,7 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { buildCors, enforceRateLimit } from "../_shared/http.ts";
+import {
+  buildCors,
+  enforceRateLimit,
+  errorResponse,
+  getRequestId,
+  jsonResponse,
+  logEvent,
+  parseJsonBody,
+  withRequestId,
+} from "../_shared/http.ts";
+import { parseStatementSchema } from "../_shared/schemas.ts";
 
 const SYSTEM_PROMPT = `Você é um especialista em extrair transações financeiras de extratos bancários.
 
@@ -57,8 +67,6 @@ Formato de resposta:
   }
 }`;
 
-const MAX_BASE64_SIZE = 5 * 1024 * 1024 * 1.33;
-const MAX_TEXT_SIZE = 100000;
 
 function verifyAuth(req: Request, corsHeaders: Record<string, string>): { token: string } | { error: Response } {
   const authHeader = req.headers.get("Authorization");
@@ -107,7 +115,8 @@ async function getAuthenticatedUserId(token: string, corsHeaders: Record<string,
 }
 
 serve(async (req) => {
-  const corsHeaders = buildCors(req);
+  const requestId = getRequestId(req);
+  const corsHeaders = withRequestId(buildCors(req), requestId);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -120,19 +129,16 @@ serve(async (req) => {
     const limited = enforceRateLimit("parse-statement", authResult.userId, 6, corsHeaders);
     if (limited) return limited;
 
-    const { pdfBase64, pdfText } = await req.json();
-
-    if (pdfBase64 && pdfBase64.length > MAX_BASE64_SIZE) {
-      return new Response(JSON.stringify({ error: "PDF muito grande. Tamanho máximo: 5MB" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const parsed = await parseJsonBody(req, parseStatementSchema, corsHeaders);
+    if ("error" in parsed) {
+      logEvent("info", "parse-statement", requestId, "corpo inválido");
+      return parsed.error;
     }
+    const { pdfBase64, pdfText } = parsed.data;
+    logEvent("info", "parse-statement", requestId, "requisição aceita", {
+      mode: pdfText ? "text" : "pdf",
+    });
 
-    if (pdfText && pdfText.length > MAX_TEXT_SIZE) {
-      return new Response(JSON.stringify({ error: "Texto muito longo. Tamanho máximo: 100KB" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (!pdfBase64 && !pdfText) {
-      return new Response(JSON.stringify({ error: "PDF base64 ou texto é obrigatório" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -183,9 +189,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Formato de resposta inválido. Tente novamente." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify(parsedContent), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return jsonResponse(parsedContent, 200, corsHeaders);
   } catch (error) {
-    console.error("Parse statement error:", error);
-    return new Response(JSON.stringify({ error: "Erro ao processar solicitação" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    logEvent(
+      "error",
+      "parse-statement",
+      requestId,
+      error instanceof Error ? error.message : String(error),
+    );
+    return errorResponse("Erro ao processar solicitação", 500, corsHeaders);
   }
 });
