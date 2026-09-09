@@ -1,7 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { buildCors, enforceRateLimit } from "../_shared/http.ts";
+import {
+  buildCors,
+  enforceRateLimit,
+  errorResponse,
+  getRequestId,
+  jsonResponse,
+  logEvent,
+  parseJsonBody,
+  withRequestId,
+} from "../_shared/http.ts";
+import { categorizeSchema } from "../_shared/schemas.ts";
 
 const EXPENSE_CATS = ['alimentacao', 'transporte', 'moradia', 'saude', 'lazer', 'educacao', 'vestuario', 'assinaturas', 'outros_despesa'];
 const INCOME_CATS = ['salario', 'freelance', 'investimentos', 'vendas', 'outros_receita'];
