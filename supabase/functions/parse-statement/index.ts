@@ -189,9 +189,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Formato de resposta inválido. Tente novamente." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify(parsedContent), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return jsonResponse(parsedContent, 200, corsHeaders);
   } catch (error) {
-    console.error("Parse statement error:", error);
-    return new Response(JSON.stringify({ error: "Erro ao processar solicitação" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    logEvent(
+      "error",
+      "parse-statement",
+      requestId,
+      error instanceof Error ? error.message : String(error),
+    );
+    return errorResponse("Erro ao processar solicitação", 500, corsHeaders);
   }
 });
