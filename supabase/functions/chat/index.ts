@@ -254,7 +254,8 @@ async function getAuthenticatedUserId(token: string, corsHeaders: Record<string,
 }
 
 serve(async (req) => {
-  const corsHeaders = buildCors(req);
+  const requestId = getRequestId(req);
+  const corsHeaders = withRequestId(buildCors(req), requestId);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -266,22 +267,18 @@ serve(async (req) => {
     const limited = enforceRateLimit("chat", authResult.userId, 30, corsHeaders);
     if (limited) return limited;
 
-    const { messages, context } = await req.json();
+    const parsed = await parseJsonBody(req, chatRequestSchema, corsHeaders);
+    if ("error" in parsed) {
+      logEvent("info", "chat", requestId, "corpo inválido");
+      return parsed.error;
+    }
+    const { messages, context } = parsed.data;
 
-    if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: "Mensagens inválidas" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (messages.length > MAX_MESSAGES) {
-      return new Response(JSON.stringify({ error: "Muitas mensagens no histórico" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    for (const msg of messages) {
-      if (!msg?.role || !msg?.content || typeof msg.content !== 'string' || msg.content.length > MAX_MESSAGE_LENGTH || !['user', 'assistant', 'system'].includes(msg.role)) {
-        return new Response(JSON.stringify({ error: "Formato de mensagem inválido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-    }
     if (context && JSON.stringify(context).length > MAX_CONTEXT_SIZE) {
-      return new Response(JSON.stringify({ error: "Dados de contexto muito grandes" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return errorResponse("Dados de contexto muito grandes", 400, corsHeaders);
     }
+
+    logEvent("info", "chat", requestId, "requisição aceita", { messages: messages.length });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {

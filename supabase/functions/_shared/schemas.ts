@@ -20,7 +20,8 @@ export const chatRequestSchema = z.object({
     )
     .min(1)
     .max(MAX_MESSAGES),
-  context: z.unknown().optional(),
+  // deno-lint-ignore no-explicit-any
+  context: z.any().optional() as z.ZodType<any>,
 });
 
 export const parseStatementSchema = z
