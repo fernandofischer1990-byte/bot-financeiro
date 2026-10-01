@@ -1,4 +1,5 @@
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
+import { SecurityDialog } from '@/components/auth/SecurityDialog';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
@@ -7,18 +8,20 @@ import { AppSidebar, NAV_ITEMS, pathForTab } from '@/components/layout/AppSideba
 import { BottomNav } from '@/components/layout/BottomNav';
 import { Button } from '@/components/ui/button';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { Loader2, LogOut, Moon, Sun } from 'lucide-react';
+import { Loader2, LogOut, Moon, Shield, Sun } from 'lucide-react';
 
 export function AppLayout() {
   const { signOut } = useAuth();
   const { theme, toggle } = useTheme();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   const activeLabel = NAV_ITEMS.find((i) => i.path === pathname)?.label ?? 'FinBot';
 
   return (
     <SidebarProvider>
+      <SecurityDialog open={securityOpen} onOpenChange={setSecurityOpen} />
       <OnboardingDialog onNavigate={(tab) => navigate(pathForTab(tab))} />
       <div className="min-h-dvh flex w-full bg-background">
         <AppSidebar />
@@ -38,6 +41,9 @@ export function AppLayout() {
                 title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
               >
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setSecurityOpen(true)} aria-label="Segurança da conta" title="Segurança">
+                <Shield className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="sm" onClick={signOut} aria-label="Sair">
                 <LogOut className="h-4 w-4 lg:mr-2" />
