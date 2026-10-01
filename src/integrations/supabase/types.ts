@@ -389,7 +389,6 @@ export type Database = {
         Args: { p_end?: string; p_start?: string }
         Returns: Json
       }
-      mfa_satisfied: { Args: never; Returns: boolean }
     }
     Enums: {
       expense_category:
