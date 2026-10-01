@@ -1,3 +1,4 @@
+import { newRequestId, rememberRequestId, reportError } from '@/lib/errorReporting';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ChatContext {
@@ -64,11 +65,13 @@ export async function sendChatMessage(
     throw new Error('Você precisa estar logado para usar o chat');
   }
 
+  const requestId = newRequestId();
   const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session.access_token}`,
+      'x-request-id': requestId,
     },
     body: JSON.stringify({
       messages: messages.map(m => ({ role: m.role, content: m.content })),
@@ -76,6 +79,7 @@ export async function sendChatMessage(
     }),
     signal,
   });
+  rememberRequestId(response.headers.get('x-request-id') ?? requestId);
 
   if (!response.ok) {
     let errorMessage = 'Erro ao enviar mensagem';
@@ -85,7 +89,9 @@ export async function sendChatMessage(
     } catch {
       // ignore parse error
     }
-    throw new Error(errorMessage);
+    const err = Object.assign(new Error(errorMessage), { requestId });
+    reportError(err, 'chat', { status: response.status, requestId });
+    throw err;
   }
 
   return response;
