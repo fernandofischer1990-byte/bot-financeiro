@@ -82,6 +82,9 @@ export function mapServerMetrics(payload: ServerMetricsPayload): TransactionMetr
     byCategory: numMap(payload.by_category),
     monthlyData,
     monthlyNetWorth: series.slice(-6),
+    monthlyTotals: Object.fromEntries(
+      months.map((m) => [String(m.month_key).slice(0, 7), { income: num(m.income), expenses: num(m.expenses) }]),
+    ),
     investmentSummary: {
       deposits: num(payload.investment_summary?.deposits),
       withdraws: num(payload.investment_summary?.withdraws),

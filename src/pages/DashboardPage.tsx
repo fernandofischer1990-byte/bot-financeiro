@@ -16,12 +16,13 @@ export default function DashboardPage() {
     updateTransaction,
     refetch,
   } = useTransactionsContext();
-  const { metrics } = useFinancialMetrics();
+  const { metrics, overallMetrics } = useFinancialMetrics();
   const navigate = useNavigate();
 
   return (
     <Dashboard
       metrics={metrics}
+      overallMetrics={overallMetrics}
       transactions={filteredTransactions}
       loading={initialLoading || !hasLoadedOnce}
       loadError={loadError}

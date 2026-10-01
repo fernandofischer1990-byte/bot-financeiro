@@ -78,4 +78,6 @@ export interface TransactionMetrics {
   monthlyData: MonthlyPoint[];
   investmentSummary: InvestmentSummary;
   monthlyNetWorth: NetWorthPoint[];
+  /** Totais por mês (chave YYYY-MM) vindos do resumo do banco. */
+  monthlyTotals?: Record<string, { income: number; expenses: number }>;
 }

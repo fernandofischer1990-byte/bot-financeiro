@@ -8,6 +8,8 @@ interface Props {
 
 interface State {
   error: Error | null;
+  errorId: string | null;
+  requestId: string | null;
 }
 
 /**
@@ -15,18 +17,21 @@ interface State {
  * a aplicação inteira em tela branca.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, errorId: null, requestId: null };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[ErrorBoundary] Falha de render:', error, info.componentStack);
+    const { errorId, requestId } = reportError(error, 'ErrorBoundary', {
+      componentStack: info.componentStack?.slice(0, 2000),
+    });
+    this.setState({ errorId, requestId });
   }
 
   private handleReset = () => {
-    this.setState({ error: null });
+    this.setState({ error: null, errorId: null, requestId: null });
   };
 
   render() {
@@ -45,6 +50,14 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="break-words rounded-md bg-muted p-2 text-xs text-muted-foreground">
             {this.state.error.message}
           </p>
+          {this.state.errorId && (
+            <p className="text-xs text-muted-foreground">
+              Código do erro: <span className="font-mono">{this.state.errorId}</span>
+              {this.state.requestId && (
+                <> · requisição <span className="font-mono">{this.state.requestId.slice(0, 8)}</span></>
+              )}
+            </p>
+          )}
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Button onClick={this.handleReset}>Tentar novamente</Button>
             <Button variant="outline" onClick={() => window.location.assign('/dashboard')}>

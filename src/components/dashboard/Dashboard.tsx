@@ -22,6 +22,8 @@ import { Button } from '@/components/ui/button';
 
 interface DashboardProps {
   metrics: TransactionMetrics;
+  /** Resumo geral (sem filtro) do banco, usado para tendências mensais. */
+  overallMetrics?: TransactionMetrics;
   transactions: Transaction[];
   loading: boolean;
   loadError?: string | null;
@@ -40,6 +42,7 @@ function pct(curr: number, prev: number): number | null {
 
 export function Dashboard({
   metrics,
+  overallMetrics,
   transactions,
   loading,
   loadError,
@@ -57,11 +60,16 @@ export function Dashboard({
   // Month-over-month — usa a fonte única de cálculo (metricsCalculator)
   const trends = useMemo(() => {
     const now = new Date();
-    const curr = getOperationalMonthTotals(allTransactions, getCurrentMonthKey(now));
-    const prev = getOperationalMonthTotals(
-      allTransactions,
-      getCurrentMonthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
-    );
+    const currKey = getCurrentMonthKey(now);
+    const prevKey = getCurrentMonthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const server = overallMetrics?.monthlyTotals;
+    const fromServer = (key: string) => {
+      const m = server?.[key.slice(0, 7)] ?? { income: 0, expenses: 0 };
+      return { income: m.income, expenses: m.expenses, balance: m.income - m.expenses };
+    };
+    // Prefere o resumo agregado do banco; varre transações só como fallback.
+    const curr = server ? fromServer(currKey) : getOperationalMonthTotals(allTransactions, currKey);
+    const prev = server ? fromServer(prevKey) : getOperationalMonthTotals(allTransactions, prevKey);
     return {
       balanceTrend: pct(curr.balance, prev.balance),
       incomeTrend: pct(curr.income, prev.income),
@@ -71,7 +79,7 @@ export function Dashboard({
       monthSavings: curr.balance,
       savingsRate: curr.income > 0 ? (curr.balance / curr.income) * 100 : 0,
     };
-  }, [allTransactions]);
+  }, [overallMetrics?.monthlyTotals, allTransactions]);
 
   if (loading) {
     return (
