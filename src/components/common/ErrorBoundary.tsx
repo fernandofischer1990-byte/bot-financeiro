@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle } from 'lucide-react';
+import { reportError } from '@/lib/errorReporting';
 
 interface Props {
   children: ReactNode;

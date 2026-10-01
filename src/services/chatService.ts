@@ -1,3 +1,4 @@
+import { newRequestId, rememberRequestId, reportError } from '@/lib/errorReporting';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ChatContext {
