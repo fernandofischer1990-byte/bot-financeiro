@@ -5,6 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Wallet } from 'lucide-react';
+import { lovable } from '@/integrations/lovable/index';
+import { reportError } from '@/lib/errorReporting';
+import { toast } from '@/hooks/use-toast';
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -29,6 +32,14 @@ export function AuthPage() {
       // Error is handled in useAuth
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin });
+    if (result.error) {
+      const { errorId } = reportError(result.error, 'auth.google');
+      toast({ title: 'Não foi possível entrar com Google', description: `Código do erro: ${errorId}`, variant: 'destructive' });
     }
   };
 
@@ -98,6 +109,12 @@ export function AuthPage() {
               )}
             </Button>
           </form>
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />ou<span className="h-px flex-1 bg-border" />
+          </div>
+          <Button type="button" variant="outline" className="w-full h-11" onClick={handleGoogle} disabled={loading}>
+            Continuar com Google
+          </Button>
           <div className="mt-6 text-center">
             <button
               type="button"
