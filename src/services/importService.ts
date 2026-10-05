@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 export interface ImportHistoryRecord {
   id: string;
@@ -30,7 +31,7 @@ export async function saveImportHistory(
     .single();
 
   if (error) {
-    console.error('[ImportService] saveImportHistory error:', error);
+    logger.error('[ImportService] saveImportHistory error:', error);
     return { data: null, error: error.message };
   }
 
@@ -48,7 +49,7 @@ export async function fetchImportHistory(
     .limit(50);
 
   if (error) {
-    console.error('[ImportService] fetchImportHistory error:', error);
+    logger.error('[ImportService] fetchImportHistory error:', error);
     return { data: [], error: error.message };
   }
 

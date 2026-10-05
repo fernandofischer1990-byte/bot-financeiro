@@ -10,6 +10,7 @@ import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { parseInvestmentSpreadsheet, ParsedInvestmentRow } from '@/lib/investmentSpreadsheetParser';
 import { formatCurrency, getInvestmentTypeLabel } from '@/lib/constants';
 import { friendlyImportError } from '@/lib/importErrors';
+import { logger } from '@/lib/logger';
 
 type Step = 'upload' | 'parsing' | 'review' | 'saving' | 'done';
 
@@ -52,7 +53,7 @@ export function InvestmentImportWizard({ open, onOpenChange }: Props) {
       setRows(parsed);
       setStep('review');
     } catch (e) {
-      console.error('[InvestmentImport] parse error', e);
+      logger.error('[InvestmentImport] parse error', e);
       toast({ title: 'Erro ao ler arquivo', description: friendlyImportError(e), variant: 'destructive' });
       setStep('upload');
     }

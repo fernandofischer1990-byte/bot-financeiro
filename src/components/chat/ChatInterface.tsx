@@ -322,7 +322,7 @@ export function ChatInterface() {
         actions: [],
       }));
     } catch (e) {
-      console.error('[Chat] web_search failed:', e);
+      logger.error('[Chat] web_search failed:', e);
       const msg = e instanceof Error ? e.message : 'Erro desconhecido';
       await addMessage('assistant', JSON.stringify({
         message: `❌ **Falha na pesquisa:** ${msg}\n\nTente novamente em instantes.`,
@@ -477,7 +477,7 @@ export function ChatInterface() {
         setActiveIntent(null);
       }
     } catch (e) {
-      console.error('[Chat] addTransaction failed:', e);
+      logger.error('[Chat] addTransaction failed:', e);
       toast({ title: 'Erro ao registrar transação', variant: 'destructive' });
     } finally {
       removePending(idx);
@@ -544,7 +544,7 @@ export function ChatInterface() {
       if (error instanceof Error) {
         errorMessage = error.name === 'AbortError' ? 'Requisição cancelada ou tempo limite excedido' : error.message;
       }
-      console.error("[Chat] error:", errorMessage);
+      logger.error("[Chat] error:", errorMessage);
       toast({ title: 'Erro', description: errorMessage, variant: 'destructive' });
       setStreamingContent('');
     } finally {

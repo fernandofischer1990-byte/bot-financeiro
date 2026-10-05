@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Hard safety net: never keep the app blocked forever
     const timeoutId = window.setTimeout(() => {
       if (!mounted) return;
-      console.warn('[Auth] Timeout — releasing UI');
+      logger.warn('[Auth] Timeout — releasing UI');
       setLoading(false);
     }, 8000);
 
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
 
         if (error) {
-          console.error('[Auth] Session recovery error:', error.message);
+          logger.error('[Auth] Session recovery error:', error.message);
           if (error.message?.includes('Invalid Refresh Token') ||
               error.message?.includes('refresh_token_not_found')) {
             toast({
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
       } catch (err) {
-        console.error('[Auth] Failed to recover session:', err);
+        logger.error('[Auth] Failed to recover session:', err);
       } finally {
         window.clearTimeout(timeoutId);
         if (mounted) setLoading(false);

@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { ColumnMapping } from '@/components/import/ColumnMapper';
+import { logger } from '@/lib/logger';
 
 export interface MappingTemplate {
   id: string;
@@ -15,7 +16,7 @@ export async function fetchMappingTemplates(userId: string): Promise<MappingTemp
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching mapping templates:', error);
+    logger.error('Error fetching mapping templates:', error);
     return [];
   }
 
@@ -35,7 +36,7 @@ export async function saveMappingTemplate(userId: string, name: string, mapping:
     );
 
   if (error) {
-    console.error('Error saving mapping template:', error);
+    logger.error('Error saving mapping template:', error);
     return false;
   }
   return true;
@@ -48,7 +49,7 @@ export async function deleteMappingTemplate(id: string): Promise<boolean> {
     .eq('id', id);
 
   if (error) {
-    console.error('Error deleting mapping template:', error);
+    logger.error('Error deleting mapping template:', error);
     return false;
   }
   return true;

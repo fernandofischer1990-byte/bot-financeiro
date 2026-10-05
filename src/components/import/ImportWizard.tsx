@@ -26,6 +26,7 @@ import { saveImportHistory } from '@/services/importService';
 import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, CategoryMapping } from '@/services/categoryMappingService';
 import { fetchMappingTemplates, saveMappingTemplate, deleteMappingTemplate, MappingTemplate } from '@/services/mappingTemplateService';
 import { categorizeWithAI } from '@/services/categorizationService';
+import { logger } from '@/lib/logger';
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
@@ -338,7 +339,7 @@ export function ImportWizard() {
             type = 'expense';
             amount = rawExpense;
           } else {
-            console.warn(`Row ${i + 2}: income=${rawIncomeVal}, expense=${rawExpenseVal}, parsed: income=${rawIncome}, expense=${rawExpense}`);
+            logger.warn(`Row ${i + 2}: income=${rawIncomeVal}, expense=${rawExpenseVal}, parsed: income=${rawIncome}, expense=${rawExpense}`);
             return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Sem valor` };
           }
         } else {

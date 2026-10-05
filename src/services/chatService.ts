@@ -1,5 +1,6 @@
 import { newRequestId, rememberRequestId, reportError } from '@/lib/errorReporting';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 export interface ChatContext {
   balance: number;
@@ -127,7 +128,7 @@ export async function* readSSEStream(response: Response): AsyncGenerator<string>
           yield content;
         }
       } catch (e) {
-        console.warn('[SSE] Skipping malformed JSON chunk:', jsonStr.slice(0, 100), e);
+        logger.warn('[SSE] Skipping malformed JSON chunk:', jsonStr.slice(0, 100), e);
       }
     }
   }
