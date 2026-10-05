@@ -1,4 +1,4 @@
-import { read, utils } from '@e965/xlsx';
+import { readSpreadsheet } from '@/lib/spreadsheetReader';
 import { InvestmentInput, InvestmentType } from '@/types/investment';
 import { normalizeToLocalDate } from '@/lib/dateUtils';
 
@@ -199,20 +199,12 @@ export async function parseInvestmentSpreadsheet(file: File): Promise<{
   sheetName: string;
   totalRows: number;
 }> {
-  const buf = await file.arrayBuffer();
-  const wb = read(buf, { cellDates: true });
-  let chosenSheet = wb.SheetNames[0];
-  // pick sheet with most rows
-  let maxRows = 0;
-  for (const sn of wb.SheetNames) {
-    const json = utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sn], { defval: null });
-    if (json.length > maxRows) {
-      maxRows = json.length;
-      chosenSheet = sn;
-    }
-  }
-  const data = utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[chosenSheet], { defval: null });
+  const { rows: data, sheetName } = await readSpreadsheet(file, {
+    cellDates: true,
+    pickLargestSheet: true,
+    fillEmptyWithNull: true,
+  });
   const parsed = parseInvestmentSheet(data, file.name)
     .filter(r => r.input.investment_name && r.input.initial_amount > 0);
-  return { rows: parsed, sheetName: chosenSheet, totalRows: data.length };
+  return { rows: parsed, sheetName, totalRows: data.length };
 }

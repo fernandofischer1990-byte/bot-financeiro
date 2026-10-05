@@ -1,19 +1,15 @@
-import { read, utils } from '@e965/xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeTransactionRow, NormalizedTransactionRow, normalizeCategory } from '@/lib/transactionNormalization';
 import { normalizeToLocalDate } from '@/lib/dateUtils';
+import { readSpreadsheet } from '@/lib/spreadsheetReader';
 import { ExtractedTransaction } from '@/components/transactions/TransactionPreview';
 
 /**
  * Parse a spreadsheet file (CSV, XLS, XLSX, ODS, TSV) into normalized transaction rows.
  */
 export async function parseSpreadsheetFile(file: File): Promise<NormalizedTransactionRow[]> {
-  const buffer = await file.arrayBuffer();
-  const workbook = read(buffer);
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const data = utils.sheet_to_json<Record<string, unknown>>(sheet);
-
-  return data.map((row, index) => normalizeTransactionRow(row, index));
+  const { rows } = await readSpreadsheet(file);
+  return rows.map((row, index) => normalizeTransactionRow(row, index));
 }
 
 /**
