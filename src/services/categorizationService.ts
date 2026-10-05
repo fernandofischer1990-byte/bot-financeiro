@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 export interface CategorizeItem {
   index: number;
@@ -30,7 +31,7 @@ export async function categorizeWithAI(
         body: { items: batch },
       });
       if (error) {
-        console.error('[Categorization] batch error:', error);
+        logger.error('[Categorization] batch error:', error);
         // Continue other batches but report the first error
         return { map, error: error.message || 'Erro ao categorizar com IA' };
       }
@@ -41,7 +42,7 @@ export async function categorizeWithAI(
         }
       }
     } catch (e) {
-      console.error('[Categorization] invoke failed:', e);
+      logger.error('[Categorization] invoke failed:', e);
       return { map, error: e instanceof Error ? e.message : 'Erro inesperado' };
     }
   }

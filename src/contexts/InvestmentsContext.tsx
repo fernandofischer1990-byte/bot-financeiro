@@ -71,7 +71,7 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
     const { data, error } = await fetchUserInvestments(user.id);
     if (error) {
       setLoadError(error);
-      console.error('[Investments] fetch error', error);
+      logger.error('[Investments] fetch error', error);
     } else if (data) {
       setInvestments(data);
       setLoadError(null);

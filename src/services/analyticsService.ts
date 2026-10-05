@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { logger } from '@/lib/logger';
 
 export async function trackEvent(
   userId: string,
@@ -13,6 +14,6 @@ export async function trackEvent(
       properties: (properties ?? null) as Json,
     }]);
   } catch (err) {
-    console.warn('[Analytics] Failed to track event:', eventName, err);
+    logger.warn('[Analytics] Failed to track event:', eventName, err);
   }
 }

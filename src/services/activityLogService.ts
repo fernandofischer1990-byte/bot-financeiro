@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { logger } from '@/lib/logger';
 
 export type ActivityAction = 'create' | 'update' | 'delete' | 'import' | 'bulk_delete';
 export type ActivityEntity = 'transaction' | 'investment';
@@ -46,7 +47,7 @@ export async function logActivity(userId: string, entry: ActivityLogInput): Prom
       after: (entry.after ?? null) as Json,
     }]);
   } catch (err) {
-    console.warn('[Activity] Falha ao registrar histórico:', entry.action, entry.entity, err);
+    logger.warn('[Activity] Falha ao registrar histórico:', entry.action, entry.entity, err);
   }
 }
 

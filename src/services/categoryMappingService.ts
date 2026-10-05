@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 export interface CategoryMapping {
   id: string;
@@ -154,7 +155,7 @@ export async function getUserCategoryMappings(userId: string): Promise<CategoryM
     .order('usage_count', { ascending: false });
 
   if (error) {
-    console.error('[CategoryMapping] Error fetching:', error);
+    logger.error('[CategoryMapping] Error fetching:', error);
     return [];
   }
   return data || [];
@@ -244,7 +245,7 @@ export async function saveSingleLearnedMapping(
         .insert({ user_id: userId, description_pattern: pattern, category, usage_count: 1 });
     }
   } catch (e) {
-    console.error('[CategoryMapping] Error saving single mapping:', e);
+    logger.error('[CategoryMapping] Error saving single mapping:', e);
   }
 }
 
@@ -293,7 +294,7 @@ export async function saveLearnedMappings(
           .insert({ user_id: userId, description_pattern: pattern, category, usage_count: 1 });
       }
     } catch (e) {
-      console.error('[CategoryMapping] Error saving mapping:', e);
+      logger.error('[CategoryMapping] Error saving mapping:', e);
     }
   }
 }

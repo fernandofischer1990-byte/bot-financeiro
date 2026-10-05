@@ -30,7 +30,7 @@ export function useChatMessages() {
     const { data, error } = await fetchChatMessages(user.id);
 
     if (error) {
-      console.error('[Chat] Error fetching messages:', error);
+      logger.error('[Chat] Error fetching messages:', error);
     } else if (data !== null) {
       setMessages(data);
       logger.debug(`[Chat] Loaded ${data.length} messages`);
@@ -45,7 +45,7 @@ export function useChatMessages() {
     const { data, error } = await insertChatMessage(user.id, role, content, metadata);
 
     if (error || !data) {
-      console.error('[Chat] Error adding message:', error);
+      logger.error('[Chat] Error adding message:', error);
       toast({ title: 'Erro ao salvar mensagem', description: error || 'Erro desconhecido', variant: 'destructive' });
       return null;
     }
@@ -60,7 +60,7 @@ export function useChatMessages() {
     const { error } = await deleteChatMessages(user.id);
 
     if (error) {
-      console.error('[Chat] Error clearing history:', error);
+      logger.error('[Chat] Error clearing history:', error);
       return false;
     }
 

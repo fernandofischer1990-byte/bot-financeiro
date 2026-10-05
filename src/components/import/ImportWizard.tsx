@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { read, utils } from '@e965/xlsx';
+import { readSpreadsheet } from '@/lib/spreadsheetReader';
 
 import { FileDropZone } from './FileDropZone';
 import { ColumnMapper, ColumnMapping } from './ColumnMapper';
@@ -26,6 +26,7 @@ import { saveImportHistory } from '@/services/importService';
 import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, CategoryMapping } from '@/services/categoryMappingService';
 import { fetchMappingTemplates, saveMappingTemplate, deleteMappingTemplate, MappingTemplate } from '@/services/mappingTemplateService';
 import { categorizeWithAI } from '@/services/categorizationService';
+import { logger } from '@/lib/logger';
 
 type WizardStep = 'upload' | 'mapping' | 'duplicates' | 'review' | 'summary' | 'loading';
 
@@ -274,10 +275,7 @@ export function ImportWizard() {
     if (['csv', 'xls', 'xlsx', 'ods', 'tsv'].includes(ext)) {
       setStep('loading');
       try {
-        const buffer = await file.arrayBuffer();
-        const workbook = read(buffer);
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const data = utils.sheet_to_json<Record<string, unknown>>(sheet);
+        const { rows: data } = await readSpreadsheet(file);
 
         if (data.length === 0) throw new Error('Arquivo vazio ou sem dados reconhecíveis');
 
@@ -341,7 +339,7 @@ export function ImportWizard() {
             type = 'expense';
             amount = rawExpense;
           } else {
-            console.warn(`Row ${i + 2}: income=${rawIncomeVal}, expense=${rawExpenseVal}, parsed: income=${rawIncome}, expense=${rawExpense}`);
+            logger.warn(`Row ${i + 2}: income=${rawIncomeVal}, expense=${rawExpenseVal}, parsed: income=${rawIncome}, expense=${rawExpense}`);
             return { type: 'expense' as const, amount: 0, category: '', description: '', date: '', error: `Linha ${i + 2}: Sem valor` };
           }
         } else {

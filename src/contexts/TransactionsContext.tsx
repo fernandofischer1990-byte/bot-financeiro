@@ -141,7 +141,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
     const { data, error } = await fetchUserTransactions(user.id);
 
     if (error) {
-      console.error('[Transactions] Fetch error:', error);
+      logger.error('[Transactions] Fetch error:', error);
       setLoadError(error);
       if (!silent) {
         toastRef.current({ title: 'Erro ao carregar transações', description: error, variant: 'destructive' });
@@ -183,7 +183,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       void trackEvent(user.id, 'transaction_created', { type: data.type, source: data.source, amount: data.amount });
       return data;
     } catch (e) {
-      console.error('[Transactions] handleAddTransaction error:', e);
+      logger.error('[Transactions] handleAddTransaction error:', e);
       toast({ title: MESSAGES.transaction.createFailed, description: translateError(e), variant: 'destructive' });
       return null;
     }
@@ -214,7 +214,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
       return data.length;
     } catch (e) {
-      console.error('[Transactions] handleAddMultiple error:', e);
+      logger.error('[Transactions] handleAddMultiple error:', e);
       toast({ title: MESSAGES.import.failed, description: translateError(e), variant: 'destructive' });
       return 0;
     }
@@ -253,7 +253,7 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       });
       return true;
     } catch (e) {
-      console.error('[Transactions] handleUpdate error:', e);
+      logger.error('[Transactions] handleUpdate error:', e);
       if (rollback) setTransactions(rollback);
       toast({ title: MESSAGES.transaction.updateFailed, description: translateError(e), variant: 'destructive' });
       return false;
