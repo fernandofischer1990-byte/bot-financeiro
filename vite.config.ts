@@ -28,8 +28,8 @@ export default defineConfig(({ mode }) => ({
             return "charts";
           if (/[\\/]node_modules[\\/]@e965[\\/]xlsx/.test(id)) return "spreadsheet";
           if (/[\\/]node_modules[\\/]@supabase[\\/]/.test(id)) return "supabase";
-          if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/.test(id))
-            return "react";
+          // React fica no mesmo chunk que as libs que dependem dele (radix etc.):
+          // separá-lo criava import circular vendor<->react e `forwardRef` undefined em produção.
           return "vendor";
         },
       },
