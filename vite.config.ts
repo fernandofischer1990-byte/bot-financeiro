@@ -28,9 +28,9 @@ export default defineConfig(({ mode }) => ({
             return "charts";
           if (/[\\/]node_modules[\\/]@e965[\\/]xlsx/.test(id)) return "spreadsheet";
           if (/[\\/]node_modules[\\/]@supabase[\\/]/.test(id)) return "supabase";
-          // React fica no mesmo chunk que as libs que dependem dele (radix etc.):
-          // separá-lo criava import circular vendor<->react e `forwardRef` undefined em produção.
-          return "vendor";
+          // Demais libs: o Rollup decide. Forçar tudo em `vendor`/`react` criava import
+          // circular entre chunks e `forwardRef` undefined em produção (tela em branco).
+          return undefined;
         },
       },
     },
