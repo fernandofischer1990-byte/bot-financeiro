@@ -314,6 +314,24 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limit_hits: {
+        Row: {
+          bucket: string
+          hit_at: string
+          id: number
+        }
+        Insert: {
+          bucket: string
+          hit_at?: string
+          id?: number
+        }
+        Update: {
+          bucket?: string
+          hit_at?: string
+          id?: number
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -385,6 +403,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_rate_limit: {
+        Args: { p_bucket: string; p_limit: number; p_window_seconds: number }
+        Returns: Json
+      }
       get_financial_metrics: {
         Args: { p_end?: string; p_start?: string }
         Returns: Json

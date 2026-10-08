@@ -60,7 +60,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const limited = enforceRateLimit("categorize-transactions", userData.user.id, 15, corsHeaders);
+    const limited = await enforceRateLimit("categorize-transactions", userData.user.id, 15, corsHeaders);
     if (limited) return limited;
 
     const parsedBody = await parseJsonBody(req, categorizeSchema, corsHeaders);
