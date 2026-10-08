@@ -264,7 +264,7 @@ serve(async (req) => {
     const authResult = await getAuthenticatedUserId(authCheck.token, corsHeaders);
     if ("error" in authResult) return authResult.error;
 
-    const limited = enforceRateLimit("chat", authResult.userId, 30, corsHeaders);
+    const limited = await enforceRateLimit("chat", authResult.userId, 30, corsHeaders);
     if (limited) return limited;
 
     const parsed = await parseJsonBody(req, chatRequestSchema, corsHeaders);

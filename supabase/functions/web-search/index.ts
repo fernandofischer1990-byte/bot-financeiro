@@ -563,7 +563,7 @@ serve(async (req) => {
   const userId = await verifyAuth(req);
   if (!userId) return errorResponse("Não autorizado", 401, corsHeaders);
 
-  const limited = enforceRateLimit("web-search", userId, 20, corsHeaders);
+  const limited = await enforceRateLimit("web-search", userId, 20, corsHeaders);
   if (limited) return limited;
 
   try {

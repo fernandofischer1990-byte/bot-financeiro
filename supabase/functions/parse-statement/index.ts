@@ -126,7 +126,7 @@ serve(async (req) => {
     const authResult = await getAuthenticatedUserId(authCheck.token, corsHeaders);
     if ("error" in authResult) return authResult.error;
 
-    const limited = enforceRateLimit("parse-statement", authResult.userId, 6, corsHeaders);
+    const limited = await enforceRateLimit("parse-statement", authResult.userId, 6, corsHeaders);
     if (limited) return limited;
 
     const parsed = await parseJsonBody(req, parseStatementSchema, corsHeaders);

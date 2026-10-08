@@ -159,15 +159,51 @@ export function checkRateLimit(
   return { allowed: true, remaining: limit - hits.length, retryAfterSeconds: 0 };
 }
 
+/**
+ * Limite consistente entre instâncias: usa o contador no banco (consume_rate_limit).
+ * Se o banco falhar, cai para o contador em memória desta instância.
+ */
+async function consumeShared(
+  key: string,
+  limit: number,
+  windowSeconds: number,
+): Promise<RateLimitResult | null> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) return null;
+  try {
+    const res = await fetch(`${url}/rest/v1/rpc/consume_rate_limit`, {
+      method: "POST",
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_bucket: key, p_limit: limit, p_window_seconds: windowSeconds }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { allowed: boolean; retry_after: number };
+    return {
+      allowed: Boolean(data.allowed),
+      remaining: data.allowed ? 1 : 0,
+      retryAfterSeconds: Number(data.retry_after) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Retorna a resposta 429 pronta quando o usuário excedeu o limite, ou null. */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   fnName: string,
   userId: string,
   limit: number,
   cors: Record<string, string>,
   windowSeconds = 60,
-): Response | null {
-  const result = checkRateLimit(`${fnName}:${userId}`, limit, windowSeconds);
+): Promise<Response | null> {
+  const key = `${fnName}:${userId}`;
+  const result = (await consumeShared(key, limit, windowSeconds)) ??
+    checkRateLimit(key, limit, windowSeconds);
   if (result.allowed) return null;
   return errorResponse(
     `Muitas requisições. Tente novamente em ${result.retryAfterSeconds}s.`,
