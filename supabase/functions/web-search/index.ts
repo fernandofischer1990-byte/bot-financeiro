@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   buildCors,
   enforceRateLimit,
@@ -9,28 +8,17 @@ import {
   logEvent,
   parseJsonBody,
   withRequestId,
+  verifyAuth as sharedVerifyAuth,
+  getAuthenticatedUserId,
 } from "../_shared/http.ts";
 import { webSearchSchema } from "../_shared/schemas.ts";
 
-/** Validates the caller's session token. Returns the user id or null. */
 async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const token = authHeader.replace("Bearer ", "");
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data, error } = await supabase.auth.getClaims(token);
-    if (error || !data?.claims?.sub) return null;
-    return data.claims.sub as string;
-  } catch {
-    return null;
-  }
+  const check = sharedVerifyAuth(req, {});
+  if ("error" in check) return null;
+  const res = await getAuthenticatedUserId(check.token, {});
+  return "error" in res ? null : res.userId;
 }
-
 
 const nowStamp = () =>
   new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
