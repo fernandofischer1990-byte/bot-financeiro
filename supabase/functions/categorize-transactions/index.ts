@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import {
   buildCors,
@@ -10,6 +9,8 @@ import {
   logEvent,
   parseJsonBody,
   withRequestId,
+  verifyAuth,
+  getAuthenticatedUserId,
 } from "../_shared/http.ts";
 import { categorizeSchema } from "../_shared/schemas.ts";
 
@@ -49,18 +50,12 @@ serve(async (req) => {
 
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    const token = authHeader.replace("Bearer ", "");
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const authCheck = verifyAuth(req, corsHeaders);
+    if ("error" in authCheck) return authCheck.error;
+    const authResult = await getAuthenticatedUserId(authCheck.token, corsHeaders);
+    if ("error" in authResult) return authResult.error;
 
-    const limited = await enforceRateLimit("categorize-transactions", userData.user.id, 15, corsHeaders);
+    const limited = await enforceRateLimit("categorize-transactions", authResult.userId, 15, corsHeaders);
     if (limited) return limited;
 
     const parsedBody = await parseJsonBody(req, categorizeSchema, corsHeaders);
