@@ -411,6 +411,7 @@ export type Database = {
         Args: { p_end?: string; p_start?: string }
         Returns: Json
       }
+      purge_old_analytics_events: { Args: { p_days?: number }; Returns: number }
     }
     Enums: {
       expense_category:

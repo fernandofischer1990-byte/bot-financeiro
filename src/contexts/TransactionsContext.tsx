@@ -352,7 +352,14 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
         const tx = parseRealtimeTransaction(payload.new);
         if (!tx) return;
-        setTransactions(prev => sortByDateDesc(prev.map(t => t.id === tx.id ? tx : t)));
+        // Ignora eventos atrasados: não sobrescreve edição local mais recente
+        setTransactions(prev => {
+          const current = prev.find(t => t.id === tx.id);
+          if (current?.updated_at && tx.updated_at && Date.parse(current.updated_at) > Date.parse(tx.updated_at)) {
+            return prev;
+          }
+          return sortByDateDesc(prev.map(t => t.id === tx.id ? tx : t));
+        });
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` }, (payload) => {
         const id = parseRealtimeDeletedId(payload.old);
