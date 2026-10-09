@@ -212,3 +212,27 @@ export async function enforceRateLimit(
     { "Retry-After": String(result.retryAfterSeconds) },
   );
 }
+
+// ---------------------------------------------------------------------------
+// Autenticação compartilhada (Fase 2) — única implementação para todas as funções
+// ---------------------------------------------------------------------------
+import { createClient as createAuthClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+export function verifyAuth(req: Request, cors: Record<string, string>): { token: string } | { error: Response } {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return { error: errorResponse("Não autorizado", 401, cors) };
+  return { token: authHeader.slice(7) };
+}
+
+export async function getAuthenticatedUserId(
+  token: string,
+  cors: Record<string, string>,
+): Promise<{ userId: string } | { error: Response }> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !anon) return { error: errorResponse("Configuração de serviço incompleta", 500, cors) };
+  const client = createAuthClient(url, anon, { global: { headers: { Authorization: `Bearer ${token}` } } });
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data?.user) return { error: errorResponse("Não autorizado", 401, cors) };
+  return { userId: data.user.id };
+}

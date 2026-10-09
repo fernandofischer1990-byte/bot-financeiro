@@ -9,6 +9,8 @@ import {
   logEvent,
   parseJsonBody,
   withRequestId,
+  verifyAuth,
+  getAuthenticatedUserId,
 } from "../_shared/http.ts";
 import { chatRequestSchema, MAX_CONTEXT_SIZE } from "../_shared/schemas.ts";
 
@@ -230,28 +232,6 @@ Saída:
   "message": "Suas despesas do mês corrente somam **R$ X,XX**. Quer ver o detalhamento por categoria?",
   "actions": []
 }`;
-
-function verifyAuth(req: Request, corsHeaders: Record<string, string>): { token: string } | { error: Response } {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return { error: new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
-  }
-  return { token: authHeader.replace("Bearer ", "") };
-}
-
-async function getAuthenticatedUserId(token: string, corsHeaders: Record<string, string>): Promise<{ userId: string } | { error: Response }> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return { error: new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
-  }
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data?.user) {
-    return { error: new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
-  }
-  return { userId: data.user.id };
-}
 
 serve(async (req) => {
   const requestId = getRequestId(req);
