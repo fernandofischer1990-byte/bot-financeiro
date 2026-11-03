@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchTransactionsPage, type TransactionCursor, type TransactionPageFilters } from '@/services/transactionService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,6 +51,9 @@ function TransactionListComponent({
   const [cursor, setCursor] = useState<TransactionCursor | null>(null);
   const [loadingServer, setLoadingServer] = useState(false);
   const setSearch = (v: string) => { setSearchRaw(v); setServerRows(null); setCursor(null); };
+
+  const filtersKey = JSON.stringify(serverFilters ?? {});
+  useEffect(() => { setServerRows(null); setCursor(null); }, [filtersKey]);
 
   const searchServer = async (more = false) => {
     if (!user) return;
