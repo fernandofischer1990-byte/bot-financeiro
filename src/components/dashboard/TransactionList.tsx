@@ -1,4 +1,6 @@
 import { useState, useMemo, memo } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { fetchTransactionsPage, type TransactionCursor } from '@/services/transactionService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -40,9 +42,25 @@ function TransactionListComponent({
   onClearFilters 
 }: TransactionListProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
-  const [search, setSearch] = useState('');
+  const [search, setSearchRaw] = useState('');
+  const { user } = useAuth();
+  const [serverRows, setServerRows] = useState<Transaction[] | null>(null);
+  const [cursor, setCursor] = useState<TransactionCursor | null>(null);
+  const [loadingServer, setLoadingServer] = useState(false);
+  const setSearch = (v: string) => { setSearchRaw(v); setServerRows(null); setCursor(null); };
+
+  const searchServer = async (more = false) => {
+    if (!user || !search.trim()) return;
+    setLoadingServer(true);
+    const r = await fetchTransactionsPage(user.id, { cursor: more ? cursor : null, filters: { search } });
+    setLoadingServer(false);
+    if (r.error) return;
+    setServerRows(prev => (more && prev ? [...prev, ...r.data] : r.data));
+    setCursor(r.nextCursor);
+  };
 
   const filteredTransactions = useMemo(() => {
+    if (serverRows) return serverRows;
     const q = search.trim().toLowerCase();
     if (!q) return transactions;
     return transactions.filter(tx => {
@@ -57,7 +75,7 @@ function TransactionListComponent({
       ].filter(Boolean).join(' ').toLowerCase();
       return fields.includes(q);
     });
-  }, [transactions, search]);
+  }, [transactions, search, serverRows]);
 
   const summary = useMemo(() => {
     let income = 0, expense = 0, investment = 0;
@@ -76,8 +94,8 @@ function TransactionListComponent({
       const dateB = new Date(b.transaction_date).getTime();
       return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
     });
-    return sorted.slice(0, maxItems);
-  }, [filteredTransactions, sortOrder, maxItems]);
+    return serverRows ? sorted : sorted.slice(0, maxItems);
+  }, [filteredTransactions, sortOrder, maxItems, serverRows]);
 
   const { groupedTransactions, sortedDateKeys } = useMemo(() => {
     const groups = displayTransactions.reduce((acc, tx) => {
@@ -272,6 +290,21 @@ function TransactionListComponent({
               ))}
             </div>
           </ScrollArea>
+        )}
+        {search.trim() && (
+          <div className="flex justify-center gap-2 p-3 border-t border-border">
+            {!serverRows ? (
+              <Button variant="outline" size="sm" disabled={loadingServer} onClick={() => searchServer(false)}>
+                {loadingServer ? 'Buscando...' : 'Buscar em todo o histórico'}
+              </Button>
+            ) : cursor ? (
+              <Button variant="outline" size="sm" disabled={loadingServer} onClick={() => searchServer(true)}>
+                {loadingServer ? 'Carregando...' : 'Carregar mais'}
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Fim dos resultados</p>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

@@ -185,3 +185,68 @@ export async function deleteUserTransactions(
   const { error } = await query;
   return { error: error?.message || null };
 }
+
+export interface TransactionPageFilters {
+  type?: 'income' | 'expense' | 'investment';
+  category?: string;
+  startDate?: string; // yyyy-MM-dd
+  endDate?: string;
+  search?: string;
+}
+
+export interface TransactionCursor {
+  date: string;
+  id: string;
+}
+
+export const TX_PAGE_SIZE = 50;
+
+/** Sanitiza o texto de busca para uso seguro em filtros PostgREST (or/ilike). */
+export function sanitizeSearch(q: string): string {
+  return q.replace(/[%_,()*\\:"']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+}
+
+/**
+ * Página de transações por cursor (keyset em transaction_date desc, id desc),
+ * com filtros aplicados no servidor sobre todo o histórico.
+ */
+export async function fetchTransactionsPage(
+  userId: string,
+  opts: { cursor?: TransactionCursor | null; limit?: number; filters?: TransactionPageFilters } = {}
+): Promise<{ data: Transaction[]; nextCursor: TransactionCursor | null; error: string | null }> {
+  if (!userId) return { data: [], nextCursor: null, error: 'userId inválido' };
+  const limit = Math.min(Math.max(opts.limit ?? TX_PAGE_SIZE, 1), 200);
+  const f = opts.filters ?? {};
+
+  let query = supabase
+    .from('transactions')
+    .select(TX_COLUMNS)
+    .eq('user_id', userId);
+
+  if (f.type) query = query.eq('type', f.type);
+  if (f.category) query = query.eq('category', f.category);
+  if (f.startDate) query = query.gte('transaction_date', f.startDate);
+  if (f.endDate) query = query.lte('transaction_date', f.endDate);
+  const q = f.search ? sanitizeSearch(f.search) : '';
+  if (q) query = query.or(`description.ilike.*${q}*,category.ilike.*${q}*,institution.ilike.*${q}*`);
+  if (opts.cursor) {
+    const { date, id } = opts.cursor;
+    query = query.or(`transaction_date.lt.${date},and(transaction_date.eq.${date},id.lt.${id})`);
+  }
+
+  const { data, error } = await query
+    .order('transaction_date', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+
+  if (error) return { data: [], nextCursor: null, error: error.message || 'Erro ao carregar transações' };
+  const rows = (data ?? []).map(r => castTransaction(r as Record<string, unknown>));
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+  return {
+    data: page,
+    nextCursor: hasMore && last ? { date: last.transaction_date, id: last.id } : null,
+    error: null,
+  };
+}
