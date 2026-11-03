@@ -15,6 +15,13 @@
       "when": 1791550824369,
       "tag": "0001_phase2_import_delete_analytics_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793703555310,
+      "tag": "0002_phase3_tx_page_indexes",
+      "breakpoints": true
     }
   ]
 }
