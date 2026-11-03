@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { MetricCard } from './MetricCard';
 import { CategoryChart } from './CategoryChart';
 import { MonthlyChart } from './MonthlyChart';
@@ -232,6 +233,12 @@ export function Dashboard({
           onDelete={onDeleteTransaction}
           onEdit={setEditingTransaction}
           maxItems={15}
+          serverFilters={{
+            type: filters.type === 'all' ? undefined : filters.type,
+            category: filters.category === 'all' ? undefined : filters.category,
+            startDate: filters.startDate ? format(filters.startDate, 'yyyy-MM-dd') : undefined,
+            endDate: filters.endDate ? format(filters.endDate, 'yyyy-MM-dd') : undefined,
+          }}
           hasActiveFilters={filters.period !== 'all' || filters.type !== 'all' || filters.category !== 'all'}
           onClearFilters={() => onFiltersChange({ period: 'all', type: 'all', category: 'all', startDate: null, endDate: null })}
         />

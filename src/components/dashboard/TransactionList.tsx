@@ -1,6 +1,6 @@
 import { useState, useMemo, memo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchTransactionsPage, type TransactionCursor } from '@/services/transactionService';
+import { fetchTransactionsPage, type TransactionCursor, type TransactionPageFilters } from '@/services/transactionService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,8 @@ interface TransactionListProps {
   maxItems?: number;
   hasActiveFilters?: boolean;
   onClearFilters?: () => void;
+  /** Filtros do painel aplicados também na busca no banco. */
+  serverFilters?: TransactionPageFilters;
 }
 
 type SortOrder = 'newest' | 'oldest';
@@ -39,7 +41,8 @@ function TransactionListComponent({
   onEdit, 
   maxItems = 10,
   hasActiveFilters = false,
-  onClearFilters 
+  onClearFilters,
+  serverFilters,
 }: TransactionListProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [search, setSearchRaw] = useState('');
@@ -50,9 +53,9 @@ function TransactionListComponent({
   const setSearch = (v: string) => { setSearchRaw(v); setServerRows(null); setCursor(null); };
 
   const searchServer = async (more = false) => {
-    if (!user || !search.trim()) return;
+    if (!user) return;
     setLoadingServer(true);
-    const r = await fetchTransactionsPage(user.id, { cursor: more ? cursor : null, filters: { search } });
+    const r = await fetchTransactionsPage(user.id, { cursor: more ? cursor : null, filters: { ...serverFilters, search: search.trim() || undefined } });
     setLoadingServer(false);
     if (r.error) return;
     setServerRows(prev => (more && prev ? [...prev, ...r.data] : r.data));
@@ -291,11 +294,11 @@ function TransactionListComponent({
             </div>
           </ScrollArea>
         )}
-        {search.trim() && (
+        {(search.trim() || serverRows || transactions.length > maxItems) && (
           <div className="flex justify-center gap-2 p-3 border-t border-border">
             {!serverRows ? (
               <Button variant="outline" size="sm" disabled={loadingServer} onClick={() => searchServer(false)}>
-                {loadingServer ? 'Buscando...' : 'Buscar em todo o histórico'}
+                {loadingServer ? 'Buscando...' : search.trim() ? 'Buscar em todo o histórico' : 'Ver histórico completo'}
               </Button>
             ) : cursor ? (
               <Button variant="outline" size="sm" disabled={loadingServer} onClick={() => searchServer(true)}>
