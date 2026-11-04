@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { requestPdfPassword } from '@/components/import/PdfPasswordDialog';
 import { friendlyImportError } from '@/lib/importErrors';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,7 +42,7 @@ export function FileUpload() {
       setStep('loading');
       setUploadType('pdf');
       try {
-        const result = await parseStatementPDF(file);
+        const result = await parseStatementPDF(file, requestPdfPassword);
         setExtractedTransactions(result.transactions);
         setSummary(result.summary);
         setStep('preview');

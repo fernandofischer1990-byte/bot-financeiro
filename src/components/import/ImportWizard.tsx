@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { requestPdfPassword } from '@/components/import/PdfPasswordDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransactionsContext, TransactionInput } from '@/contexts/TransactionsContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -186,7 +187,7 @@ export function ImportWizard() {
     if (ext === 'pdf') {
       setStep('loading');
       try {
-        const result = await parseStatementPDF(file);
+        const result = await parseStatementPDF(file, requestPdfPassword);
         const normalized: NormalizedTransactionRow[] = result.transactions.map(t => {
           const learnedCat = findLearnedCategory(t.description, userMappings);
           return {
