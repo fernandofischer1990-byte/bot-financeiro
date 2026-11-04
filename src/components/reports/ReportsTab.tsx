@@ -7,6 +7,8 @@ import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { formatCurrency } from '@/lib/constants';
 import { Download, Flame, Target, TrendingUp, FileText, Printer } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { fetchTransactionsInRange } from '@/services/transactionService';
 import { useToast } from '@/hooks/use-toast';
 import { DataState } from '@/components/common/DataState';
 import { BudgetsPanel } from './BudgetsPanel';
@@ -37,6 +39,7 @@ export function ReportsTab() {
   const { investments } = useInvestmentsContext();
   const { overallMetrics } = useFinancialMetrics();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { initialLoading, hasLoadedOnce, loadError, refetch } = useTransactionsContext();
 
   const irpfYear = new Date().getFullYear() - 1;
@@ -63,8 +66,14 @@ export function ReportsTab() {
   const lastMonth = monthly[monthly.length - 1];
   const monthSavings = lastMonth ? lastMonth.income - lastMonth.expenses : 0;
 
-  const exportCSV = (type: 'transactions' | 'investments') => {
+  const exportCSV = async (type: 'transactions' | 'investments') => {
     if (type === 'transactions') {
+      if (!user) return;
+      const { data: transactions, error } = await fetchTransactionsInRange(user.id);
+      if (error) {
+        toast({ title: 'Erro ao exportar', description: error, variant: 'destructive' });
+        return;
+      }
       if (transactions.length === 0) {
         toast({ title: 'Sem dados', description: 'Nenhuma transação para exportar.', variant: 'destructive' });
         return;
@@ -98,7 +107,16 @@ export function ReportsTab() {
     }
   };
 
-  const exportIrpf = () => {
+  const exportIrpf = async () => {
+    if (!user) return;
+    const { data: transactions, error } = await fetchTransactionsInRange(user.id, {
+      startDate: `${irpfYear}-01-01`,
+      endDate: `${irpfYear}-12-31`,
+    });
+    if (error) {
+      toast({ title: 'Erro ao gerar IRPF', description: error, variant: 'destructive' });
+      return;
+    }
     const report = buildIrpfReport(transactions, investments, irpfYear);
     const rows = irpfReportRows(report);
     if (rows.length === 0) {

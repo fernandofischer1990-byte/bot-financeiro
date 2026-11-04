@@ -250,3 +250,20 @@ export async function fetchTransactionsPage(
     error: null,
   };
 }
+
+/** Busca todas as transações de um intervalo (ou todo o histórico), em blocos de 200 por cursor. */
+export async function fetchTransactionsInRange(
+  userId: string,
+  filters: TransactionPageFilters = {}
+): Promise<{ data: Transaction[]; error: string | null }> {
+  const all: Transaction[] = [];
+  let cursor: TransactionCursor | null = null;
+  for (let i = 0; i < 500; i++) {
+    const r = await fetchTransactionsPage(userId, { cursor, limit: 200, filters });
+    if (r.error) return { data: [], error: r.error };
+    all.push(...r.data);
+    if (!r.nextCursor) break;
+    cursor = r.nextCursor;
+  }
+  return { data: all, error: null };
+}
