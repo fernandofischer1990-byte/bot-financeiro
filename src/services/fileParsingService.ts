@@ -21,6 +21,11 @@ export async function parseStatementPDF(file: File): Promise<{
   summary?: { totalTransactions: number; totalIncome: number; totalExpenses: number };
 }> {
   const buffer = await file.arrayBuffer();
+  // PDFs com senha (comuns em extratos do C6, Itaú etc.) não podem ser lidos pela IA.
+  const head = new TextDecoder('latin1').decode(new Uint8Array(buffer));
+  if (/\/Encrypt\b/.test(head)) {
+    throw new Error('Este PDF está protegido por senha. Abra-o, salve uma cópia sem senha (Imprimir → Salvar como PDF) e envie de novo.');
+  }
   const base64 = btoa(
     new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
   );
