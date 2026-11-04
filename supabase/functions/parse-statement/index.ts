@@ -116,7 +116,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3.8-flash",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userContent },
@@ -134,6 +134,9 @@ serve(async (req) => {
       }
       const detail = (await response.text()).slice(0, 500);
       logEvent("error", "parse-statement", requestId, "falha na IA", { status: response.status, detail });
+      if (response.status === 400) {
+        return new Response(JSON.stringify({ error: "Não foi possível ler este PDF. Se ele tiver senha, abra-o, salve uma cópia sem senha e envie de novo." }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
       return new Response(JSON.stringify({ error: "Erro ao processar extrato. Tente novamente." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
