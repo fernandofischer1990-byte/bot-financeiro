@@ -15,6 +15,11 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Uma única cópia do React, mesmo quando o Vite reotimiza dependências novas.
+    dedupe: ["react", "react-dom", "react/jsx-runtime"],
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "react/jsx-runtime", "pdfjs-dist"],
   },
   build: {
     rollupOptions: {
