@@ -28,7 +28,7 @@ export async function parseStatementPDF(file: File, requestPassword?: PasswordRe
     }
     // Abre localmente com a senha e envia só o texto.
     const text = await extractTextFromProtectedPdf(buffer, requestPassword);
-    body = { pdfText: text.slice(0, 500_000) };
+    body = { pdfText: text.slice(0, 100_000) };
   } else {
     const base64 = btoa(
       new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')

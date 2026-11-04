@@ -1,5 +1,6 @@
 import { lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
+import { PdfPasswordDialog } from "@/components/import/PdfPasswordDialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -30,6 +31,7 @@ const App = () => (
           <InvestmentsProvider>
             <TooltipProvider>
               <Toaster />
+              <PdfPasswordDialog />
               <BrowserRouter>
                 <Routes>
                   <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
