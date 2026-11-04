@@ -106,7 +106,7 @@ serve(async (req) => {
       ? `Analise o seguinte extrato bancário e extraia todas as transações:\n\n${pdfText}`
       : [
           { type: "text", text: "Analise este extrato bancário em PDF e extraia todas as transações." },
-          { type: "image_url", image_url: { url: `data:application/pdf;base64,${pdfBase64}` } },
+          { type: "file", file: { filename: "extrato.pdf", file_data: `data:application/pdf;base64,${pdfBase64}` } },
         ];
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
