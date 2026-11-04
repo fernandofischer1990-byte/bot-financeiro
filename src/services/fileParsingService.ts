@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { isEncryptedPdf, extractTextFromProtectedPdf, type PasswordRequester } from '@/lib/pdfDecrypt';
 import { normalizeTransactionRow, NormalizedTransactionRow, normalizeCategory } from '@/lib/transactionNormalization';
 import { normalizeToLocalDate } from '@/lib/dateUtils';
 import { readSpreadsheet } from '@/lib/spreadsheetReader';

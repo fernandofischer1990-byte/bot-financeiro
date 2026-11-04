@@ -51,7 +51,7 @@ export async function extractTextFromProtectedPdf(
         if (line.trim()) lines.push(line.trim());
         pages.push(lines.join('\n'));
       }
-      await doc.destroy();
+      await doc.cleanup?.();
       const text = pages.join('\n\n').trim();
       if (!text) throw new Error('O PDF foi aberto, mas não tem texto legível (pode ser uma imagem escaneada).');
       return text;
