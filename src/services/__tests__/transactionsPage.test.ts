@@ -78,3 +78,12 @@ describe("fetchTransactionsPage", () => {
     expect(sanitizeSearch("a,b(c)%d")).toBe("a b c d");
   });
 });
+
+describe("fetchTransactionsInRange", () => {
+  it("junta todos os blocos do período", async () => {
+    const { fetchTransactionsInRange } = await import("../transactionService");
+    dataset = Array.from({ length: 1234 }, (_, i) => row(i));
+    const r = await fetchTransactionsInRange("u1", { startDate: "2026-01-01", endDate: "2026-12-31" });
+    expect(r.data).toHaveLength(1234);
+  });
+});
