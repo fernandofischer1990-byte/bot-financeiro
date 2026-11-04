@@ -100,9 +100,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Configuração de serviço incompleta" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // O PDF vai como arquivo anexado (não como texto colado), senão o pedido
+    // estoura o limite do modelo e a IA recusa com erro.
     const userContent = pdfText
       ? `Analise o seguinte extrato bancário e extraia todas as transações:\n\n${pdfText}`
-      : `Analise o conteúdo deste extrato bancário em PDF (base64) e extraia todas as transações. O PDF está codificado abaixo:\n\n${pdfBase64}`;
+      : [
+          { type: "text", text: "Analise este extrato bancário em PDF e extraia todas as transações." },
+          { type: "image_url", image_url: { url: `data:application/pdf;base64,${pdfBase64}` } },
+        ];
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -127,6 +132,8 @@ serve(async (req) => {
       if (response.status === 402) {
         return new Response(JSON.stringify({ error: "Créditos insuficientes. Por favor, adicione créditos." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+      const detail = (await response.text()).slice(0, 500);
+      logEvent("error", "parse-statement", requestId, "falha na IA", { status: response.status, detail });
       return new Response(JSON.stringify({ error: "Erro ao processar extrato. Tente novamente." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
