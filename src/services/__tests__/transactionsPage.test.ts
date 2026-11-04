@@ -12,7 +12,7 @@ function builder() {
   b.limit = vi.fn((n: number) => {
     calls.push(["limit", n]);
     // simula keyset: aplica cursor se houver
-    const cur = calls.find(c => c[0] === "or" && String(c[1]).startsWith("transaction_date.lt."));
+    const cur = [...calls].reverse().find(c => c[0] === "or" && String(c[1]).startsWith("transaction_date.lt."));
     let rows = dataset;
     if (cur) {
       const m = /transaction_date\.lt\.([^,]+),and\(transaction_date\.eq\.([^,]+),id\.lt\.([^)]+)\)/.exec(String(cur[1]))!;
