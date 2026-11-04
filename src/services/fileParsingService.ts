@@ -16,23 +16,27 @@ export async function parseSpreadsheetFile(file: File): Promise<NormalizedTransa
  * Parse a PDF bank statement via the parse-statement edge function.
  * Returns extracted transactions and optional summary.
  */
-export async function parseStatementPDF(file: File): Promise<{
+export async function parseStatementPDF(file: File, requestPassword?: PasswordRequester): Promise<{
   transactions: ExtractedTransaction[];
   summary?: { totalTransactions: number; totalIncome: number; totalExpenses: number };
 }> {
   const buffer = await file.arrayBuffer();
-  // PDFs com senha (comuns em extratos do C6, Itaú etc.) não podem ser lidos pela IA.
-  const head = new TextDecoder('latin1').decode(new Uint8Array(buffer));
-  if (/\/Encrypt\b/.test(head)) {
-    throw new Error('Este PDF está protegido por senha. Abra-o, salve uma cópia sem senha (Imprimir → Salvar como PDF) e envie de novo.');
+  let body: { pdfBase64?: string; pdfText?: string };
+  if (isEncryptedPdf(buffer)) {
+    if (!requestPassword) {
+      throw new Error('Este PDF está protegido por senha.');
+    }
+    // Abre localmente com a senha e envia só o texto.
+    const text = await extractTextFromProtectedPdf(buffer, requestPassword);
+    body = { pdfText: text.slice(0, 500_000) };
+  } else {
+    const base64 = btoa(
+      new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+    body = { pdfBase64: base64 };
   }
-  const base64 = btoa(
-    new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-  );
 
-  const { data, error } = await supabase.functions.invoke('parse-statement', {
-    body: { pdfBase64: base64 },
-  });
+  const { data, error } = await supabase.functions.invoke('parse-statement', { body });
 
   if (error) {
     throw new Error(error.message || 'Erro ao processar PDF');
