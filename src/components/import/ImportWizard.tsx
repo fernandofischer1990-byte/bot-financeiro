@@ -21,7 +21,8 @@ import { parseOFX } from '@/lib/ofxParser';
 import { parseQIF } from '@/lib/qifParser';
 import { friendlyImportError } from '@/lib/importErrors';
 import { parseStatementPDF } from '@/services/fileParsingService';
-import { detectDuplicates, ImportRow, getDuplicateCounts } from '@/lib/duplicateDetector';
+import { detectDuplicates, ImportRow, getDuplicateCounts, getDateRange } from '@/lib/duplicateDetector';
+import { fetchTransactionsInRange } from '@/services/transactionService';
 import { cleanDescription } from '@/lib/descriptionCleaner';
 import { saveImportHistory } from '@/services/importService';
 import { getUserCategoryMappings, findLearnedCategory, saveLearnedMappings, CategoryMapping } from '@/services/categoryMappingService';
@@ -120,6 +121,15 @@ export function ImportWizard() {
   const { user } = useAuth();
   const { toast } = useToast();
 
+  // Compara só com as transações do banco no período do arquivo (não depende da lista em memória).
+  const checkDuplicates = useCallback(async (rows: any[]): Promise<ImportRow[]> => {
+    const range = getDateRange(rows);
+    if (!user || !range) return detectDuplicates(rows, transactions);
+    const { data, error } = await fetchTransactionsInRange(user.id, range);
+    if (error) return detectDuplicates(rows, transactions);
+    return detectDuplicates(rows, data);
+  }, [user, transactions]);
+
   useEffect(() => {
     if (user) {
       getUserCategoryMappings(user.id).then(setUserMappings);
@@ -201,7 +211,7 @@ export function ImportWizard() {
         });
         setTotalParsed(normalized.length);
         const aiClassified = await applyAICategorization(normalized);
-        const withDuplicates = detectDuplicates(aiClassified as any, transactions);
+        const withDuplicates = await checkDuplicates(aiClassified as any);
         originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setAiProgress('');
@@ -230,7 +240,7 @@ export function ImportWizard() {
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo OFX');
         setTotalParsed(normalized.length);
         const aiClassified = await applyAICategorization(normalized as any);
-        const withDuplicates = detectDuplicates(aiClassified as any, transactions);
+        const withDuplicates = await checkDuplicates(aiClassified as any);
         originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setAiProgress('');
@@ -259,7 +269,7 @@ export function ImportWizard() {
         if (normalized.length === 0) throw new Error('Nenhuma transação encontrada no arquivo QIF');
         setTotalParsed(normalized.length);
         const aiClassified = await applyAICategorization(normalized as any);
-        const withDuplicates = detectDuplicates(aiClassified as any, transactions);
+        const withDuplicates = await checkDuplicates(aiClassified as any);
         originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
         setImportRows(withDuplicates);
         setAiProgress('');
@@ -384,12 +394,12 @@ export function ImportWizard() {
     setTotalParsed(normalized.length);
     setStep('loading');
     const aiClassified = await applyAICategorization(normalized);
-    const withDuplicates = detectDuplicates(aiClassified as any, transactions);
+    const withDuplicates = await checkDuplicates(aiClassified as any);
     originalRowsRef.current = JSON.parse(JSON.stringify(withDuplicates));
     setImportRows(withDuplicates);
     setAiProgress('');
     setStep('duplicates');
-  }, [transactions, userMappings, applyAICategorization]);
+  }, [checkDuplicates, userMappings, applyAICategorization]);
 
   const handleMappingConfirm = useCallback(async () => {
     setStep('loading');
