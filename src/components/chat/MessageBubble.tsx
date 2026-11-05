@@ -1,6 +1,27 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Bot, User } from 'lucide-react';
+import { Bot, User, Copy, Check } from 'lucide-react';
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={copied ? 'Copiado' : 'Copiar resposta'}
+      title={copied ? 'Copiado' : 'Copiar resposta'}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch { /* ignore */ }
+      }}
+      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+    >
+      {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
 import { ChatMessage } from '@/hooks/useChatMessages';
 
 interface MessageBubbleProps {
@@ -18,6 +39,36 @@ function renderMarkdown(text: string): React.ReactNode[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    // Tables: header row + separator row
+    if (line.trim().startsWith('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
+      const splitRow = (r: string) => r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+      const header = splitRow(line);
+      const rows: string[][] = [];
+      let j = i + 2;
+      while (j < lines.length && lines[j].trim().startsWith('|')) {
+        rows.push(splitRow(lines[j]));
+        j++;
+      }
+      nodes.push(
+        <div key={i} className="my-2 overflow-x-auto rounded-md border border-border">
+          <table className="w-full text-xs">
+            <thead className="bg-background/60">
+              <tr>{header.map((h, k) => <th key={k} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap">{inlineFormat(h)}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri} className="border-t border-border even:bg-background/30">
+                  {r.map((c, ci) => <td key={ci} className="px-2 py-1.5 whitespace-nowrap tabular-nums">{inlineFormat(c)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      i = j - 1;
+      continue;
+    }
 
     // Headers
     if (line.startsWith('### ')) {
@@ -128,9 +179,10 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
               {isUser ? displayContent : renderMarkdown(displayContent)}
             </div>
           </div>
-          {time && (
-            <span className="text-[10px] text-muted-foreground px-1 tabular-nums">{time}</span>
-          )}
+          <div className="flex items-center gap-1 px-1">
+            {time && <span className="text-[10px] text-muted-foreground tabular-nums">{time}</span>}
+            {!isUser && <CopyButton text={displayContent} />}
+          </div>
         </div>
       </div>
     );

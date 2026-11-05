@@ -693,13 +693,29 @@ export function ChatInterface() {
             ))}
           </div>
         )}
-        <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
-          <Input
+        <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2 items-end">
+          <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={activeIntent?.missing_field ? `Informe: ${activeIntent.missing_field}...` : 'Pergunte sobre suas finanças...'}
+            rows={1}
+            aria-label="Mensagem"
+            onChange={(e) => {
+              setInput(e.target.value);
+              const el = e.currentTarget;
+              el.style.height = 'auto';
+              el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                if (input.trim() && !isStreaming) {
+                  sendMessage();
+                  e.currentTarget.style.height = 'auto';
+                }
+              }
+            }}
+            placeholder={activeIntent?.missing_field ? `Informe: ${activeIntent.missing_field}...` : 'Pergunte sobre suas finanças... (Shift+Enter quebra linha)'}
             disabled={isStreaming}
-            className="flex-1"
+            className="flex-1 resize-none max-h-36 min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           />
           {isStreaming ? (
             <Button type="button" variant="destructive" size="icon" onClick={cancelStreaming} title="Cancelar">
