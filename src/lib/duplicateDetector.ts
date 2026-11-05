@@ -74,3 +74,10 @@ export function getDuplicateCounts(rows: ImportRow[]) {
     duplicate: rows.filter(r => r.duplicateStatus === 'duplicate').length,
   };
 }
+
+/** Menor e maior data (yyyy-MM-dd) entre as linhas recebidas, ou null se vazio. */
+export function getDateRange(rows: { date: string }[]): { startDate: string; endDate: string } | null {
+  const dates = rows.map(r => r.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if (dates.length === 0) return null;
+  return { startDate: dates[0], endDate: dates[dates.length - 1] };
+}
