@@ -526,7 +526,7 @@ export function ChatInterface() {
   return (
     <div className="flex flex-col h-full bg-card rounded-xl border shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-2 min-w-0">
           <div className="p-2 bg-primary rounded-lg shrink-0">
             <Bot className="h-5 w-5 text-primary-foreground" />
@@ -585,8 +585,8 @@ export function ChatInterface() {
 
       {/* Messages */}
       <div className="relative flex-1 min-h-0">
-        <ScrollArea ref={scrollAreaRef} className="h-full p-4 chat-scrollbar">
-          <div className="space-y-4">
+        <ScrollArea ref={scrollAreaRef} className="h-full px-3 py-4 lg:px-6 chat-scrollbar">
+          <div className="space-y-4 max-w-4xl mx-auto">
             {messages.length === 0 && !streamingContent && (
               <div className="text-center py-8">
                 <Bot className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
