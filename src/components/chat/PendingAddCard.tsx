@@ -11,18 +11,22 @@ import { ptBR } from 'date-fns/locale';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, INVESTMENT_TYPES, INVESTMENT_OPERATIONS } from '@/lib/constants';
 import { getSpendingAlert } from '@/lib/financialAnalytics';
 import { parseDateOnly, getLocalISODate } from '@/lib/dateUtils';
+import { computeBalanceImpact } from '@/lib/balanceImpact';
+import { formatCurrency } from '@/lib/constants';
 import type { AddTxPayload, PendingAdd } from './chatTypes';
 
 // ── Editable confirmation card ──────────────────────────────────────
 export interface PendingAddCardProps {
   pending: PendingAdd;
   monthlyIncome: number;
+  availableBalance?: number;
+  investedBalance?: number;
   onChange: (patch: Partial<AddTxPayload>) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function PendingAddCard({ pending, monthlyIncome, onChange, onConfirm, onCancel }: PendingAddCardProps) {
+export function PendingAddCard({ pending, monthlyIncome, availableBalance = 0, investedBalance = 0, onChange, onConfirm, onCancel }: PendingAddCardProps) {
   const { edited, original, isDuplicate } = pending;
   const [isDateOpen, setIsDateOpen] = useState(false);
   const isInvestment = edited.type === 'investment';
@@ -171,6 +175,20 @@ export function PendingAddCard({ pending, monthlyIncome, onChange, onConfirm, on
             className="text-sm min-h-[40px]"
           />
         </div>
+
+        {(() => {
+          const impact = computeBalanceImpact(edited as Parameters<typeof computeBalanceImpact>[0], availableBalance, investedBalance);
+          if (!impact) return null;
+          const down = impact.after < impact.before;
+          return (
+            <div className="text-xs rounded-md bg-background/60 border border-border px-3 py-1.5 flex flex-wrap gap-1">
+              <span className="text-muted-foreground">{impact.label}:</span>
+              <span>{formatCurrency(impact.before)}</span>
+              <span aria-hidden>→</span>
+              <span className={down ? 'text-destructive font-medium' : 'text-accent font-medium'}>{formatCurrency(impact.after)}</span>
+            </div>
+          );
+        })()}
 
         <div className="flex gap-2 pt-1">
           <Button size="sm" onClick={onConfirm} className="flex-1">Confirmar</Button>

@@ -10,7 +10,7 @@ import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown, FileText } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown, FileText, Mic, MicOff } from 'lucide-react';
 import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INVESTMENT_TYPES, INVESTMENT_OPERATIONS, getInvestmentTypeLabel, getInvestmentOperationLabel } from '@/lib/constants';
 import { parseAIResponse, Action } from '@/lib/actionParser';
 import { extractPartialMessage } from '@/lib/streamingMessage';
@@ -49,6 +49,15 @@ import { CHAT_TIMEOUT_MS, QUICK_ACTIONS, INPUT_SUGGESTIONS } from './chatConstan
 import type { ClarificationPayload, PendingAdd, PendingFiscal, AddTxPayload } from './chatTypes';
 import { PendingAddCard } from './PendingAddCard';
 import { PendingFiscalCard } from './PendingFiscalCard';
+import { useSpeechInput } from '@/hooks/useSpeechInput';
+
+const SLASH_COMMANDS = [
+  { cmd: '/gasto', hint: 'Registrar uma despesa', text: 'Gastei R$ ' },
+  { cmd: '/receita', hint: 'Registrar uma receita', text: 'Recebi R$ ' },
+  { cmd: '/cotacao', hint: 'Cotação de moeda', text: 'Qual a cotação do dólar hoje?' },
+  { cmd: '/resumo', hint: 'Resumo financeiro do mês', text: 'Faça um resumo das minhas finanças deste mês' },
+  { cmd: '/investir', hint: 'Registrar um aporte', text: 'Investi R$ ' },
+];
 
 function cleanContentForDisplay(content: string): string {
   // Used for already-stored messages: parse JSON and return message field.
@@ -61,6 +70,11 @@ export function ChatInterface() {
   const { investments, updateInvestment } = useInvestmentsContext();
   const { overallMetrics: metrics } = useFinancialMetrics();
   const [input, setInput] = useState('');
+  const slashMatches = useMemo(() => {
+    const t = input.trim().toLowerCase();
+    if (!t.startsWith('/') || t.includes(' ')) return [];
+    return SLASH_COMMANDS.filter((c) => c.cmd.startsWith(t));
+  }, [input]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [pendingDeleteAll, setPendingDeleteAll] = useState<{ filter: 'all' | 'income' | 'expense' } | null>(null);
@@ -77,6 +91,9 @@ export function ChatInterface() {
   const insightsShownRef = useRef(false);
   const { messages, addMessage, clearHistory } = useChatMessages();
   const { toast } = useToast();
+  const onSpeechText = useCallback((t: string) => setInput(t), []);
+  const onSpeechError = useCallback((m: string) => toast({ title: "Microfone", description: m, variant: "destructive" }), [toast]);
+  const speech = useSpeechInput(onSpeechText, onSpeechError);
 
   const periodRange = useMemo(
     () => getPeriodRange(chatPeriod, customRange.start, customRange.end),
@@ -654,6 +671,8 @@ export function ChatInterface() {
                 key={idx}
                 pending={p}
                 monthlyIncome={monthlyMetrics.income_month}
+                availableBalance={metrics.availableBalance}
+                investedBalance={metrics.investedBalance}
                 onChange={(patch) => updatePending(idx, patch)}
                 onConfirm={() => handleConfirmAdd(idx)}
                 onCancel={() => removePending(idx)}
@@ -692,6 +711,18 @@ export function ChatInterface() {
             ))}
           </div>
         )}
+        {slashMatches.length > 0 && (
+          <div role="listbox" aria-label="Comandos rápidos" className="rounded-md border border-border bg-popover shadow-sm overflow-hidden">
+            {slashMatches.map((c) => (
+              <button key={c.cmd} type="button" role="option" aria-selected={false}
+                onClick={() => setInput(c.text)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted">
+                <span className="font-mono text-primary">{c.cmd}</span>
+                <span className="text-xs text-muted-foreground">{c.hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2 items-end">
           <textarea
             value={input}
@@ -704,6 +735,11 @@ export function ChatInterface() {
               el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
             }}
             onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === 'Tab') && slashMatches.length > 0) {
+                e.preventDefault();
+                setInput(slashMatches[0].text);
+                return;
+              }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 if (input.trim() && !isStreaming) {
@@ -716,6 +752,14 @@ export function ChatInterface() {
             disabled={isStreaming}
             className="flex-1 resize-none max-h-36 min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           />
+          {speech.supported && !isStreaming && (
+            <Button type="button" variant={speech.listening ? 'destructive' : 'outline'} size="icon"
+              onClick={() => (speech.listening ? speech.stop() : speech.start())}
+              aria-label={speech.listening ? 'Parar de ouvir' : 'Falar mensagem'}
+              title={speech.listening ? 'Parar de ouvir' : 'Falar mensagem'}>
+              {speech.listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </Button>
+          )}
           {isStreaming ? (
             <Button type="button" variant="destructive" size="icon" onClick={cancelStreaming} title="Cancelar">
               <span className="text-xs font-bold">✕</span>
