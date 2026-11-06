@@ -27,6 +27,7 @@ import { ChatMessage } from '@/hooks/useChatMessages';
 interface MessageBubbleProps {
   message: ChatMessage;
   cleanContent: (s: string) => string;
+  streaming?: boolean;
 }
 
 /**
@@ -145,7 +146,7 @@ function inlineFormat(text: string): React.ReactNode {
 }
 
 export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps>(
-  function MessageBubble({ message, cleanContent }, ref) {
+  function MessageBubble({ message, cleanContent, streaming = false }, ref) {
     const isUser = message.role === 'user';
     const displayContent = isUser ? message.content : cleanContent(message.content);
 
@@ -177,11 +178,14 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
           )}>
             <div className="text-sm leading-relaxed">
               {isUser ? displayContent : renderMarkdown(displayContent)}
+              {streaming && (
+                <span aria-hidden className="inline-block w-[2px] h-4 ml-0.5 align-text-bottom bg-primary animate-caret-blink" />
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1 px-1">
             {time && <span className="text-[10px] text-muted-foreground tabular-nums">{time}</span>}
-            {!isUser && <CopyButton text={displayContent} />}
+            {!isUser && !streaming && <CopyButton text={displayContent} />}
           </div>
         </div>
       </div>

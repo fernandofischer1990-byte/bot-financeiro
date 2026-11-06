@@ -10,7 +10,7 @@ import { useTransactionsContext } from '@/contexts/TransactionsContext';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { useFinancialMetrics } from '@/hooks/useFinancialMetrics';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown, FileText, Mic, MicOff } from 'lucide-react';
+import { Send, Loader2, Bot, Trash2, TrendingUp, TrendingDown, BarChart3, Activity, PlusCircle, CalendarIcon, Sparkles, Globe, ArrowDown, FileText, Mic } from 'lucide-react';
 import { formatCurrency, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INVESTMENT_TYPES, INVESTMENT_OPERATIONS, getInvestmentTypeLabel, getInvestmentOperationLabel } from '@/lib/constants';
 import { parseAIResponse, Action } from '@/lib/actionParser';
 import { extractPartialMessage } from '@/lib/streamingMessage';
@@ -58,6 +58,14 @@ const SLASH_COMMANDS = [
   { cmd: '/resumo', hint: 'Resumo financeiro do mês', text: 'Faça um resumo das minhas finanças deste mês' },
   { cmd: '/investir', hint: 'Registrar um aporte', text: 'Investi R$ ' },
 ];
+
+function dayLabel(d: Date): string {
+  const today = startOfDay(new Date());
+  const diff = Math.round((today.getTime() - startOfDay(d).getTime()) / 86400000);
+  if (diff === 0) return 'Hoje';
+  if (diff === 1) return 'Ontem';
+  return format(d, d.getFullYear() === today.getFullYear() ? "d 'de' MMMM" : "d 'de' MMMM 'de' yyyy", { locale: ptBR });
+}
 
 function cleanContentForDisplay(content: string): string {
   // Used for already-stored messages: parse JSON and return message field.
@@ -625,14 +633,31 @@ export function ChatInterface() {
               </div>
             )}
 
-            {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} cleanContent={cleanContentForDisplay} />
-            ))}
+            {messages.map((msg, i) => {
+              const day = msg.created_at ? new Date(msg.created_at).toDateString() : '';
+              const prevDay = i > 0 && messages[i - 1].created_at ? new Date(messages[i - 1].created_at).toDateString() : '';
+              const showDivider = !!day && day !== prevDay;
+              return (
+                <div key={msg.id} className="space-y-4">
+                  {showDivider && (
+                    <div className="flex items-center gap-3 py-1" role="separator">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-[11px] font-medium text-muted-foreground px-2.5 py-0.5 rounded-full bg-muted">
+                        {dayLabel(new Date(msg.created_at))}
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+                  <MessageBubble message={msg} cleanContent={cleanContentForDisplay} />
+                </div>
+              );
+            })}
 
             {streamingContent && (
               <MessageBubble
                 message={{ id: 'streaming', role: 'assistant', content: JSON.stringify({ message: streamingContent }), user_id: '', metadata: null, created_at: new Date().toISOString() }}
                 cleanContent={cleanContentForDisplay}
+                streaming
               />
             )}
 
@@ -753,11 +778,22 @@ export function ChatInterface() {
             className="flex-1 resize-none max-h-36 min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           />
           {speech.supported && !isStreaming && (
-            <Button type="button" variant={speech.listening ? 'destructive' : 'outline'} size="icon"
+            <Button type="button" variant="outline" size="icon"
               onClick={() => (speech.listening ? speech.stop() : speech.start())}
               aria-label={speech.listening ? 'Parar de ouvir' : 'Falar mensagem'}
-              title={speech.listening ? 'Parar de ouvir' : 'Falar mensagem'}>
-              {speech.listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              aria-pressed={speech.listening}
+              title={speech.listening ? 'Ouvindo… toque para parar' : 'Falar mensagem'}
+              className={speech.listening ? 'relative border-primary text-primary bg-primary/10' : 'relative'}>
+              {speech.listening && (
+                <span aria-hidden className="absolute inset-0 rounded-md ring-2 ring-primary/60 animate-ping" />
+              )}
+              {speech.listening ? (
+                <span aria-hidden className="flex items-end gap-[2px] h-4">
+                  {[0, 150, 300, 450].map((d) => (
+                    <span key={d} className="w-[3px] h-full rounded-full bg-primary origin-bottom animate-voice-bar" style={{ animationDelay: `${d}ms` }} />
+                  ))}
+                </span>
+              ) : <Mic className="h-4 w-4" />}
             </Button>
           )}
           {isStreaming ? (
