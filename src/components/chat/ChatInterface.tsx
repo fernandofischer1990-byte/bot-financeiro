@@ -93,6 +93,7 @@ export function ChatInterface() {
   const [chatPeriod, setChatPeriod] = useState<PeriodKey>('all');
   const [customRange, setCustomRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
   const [isCustomOpen, setIsCustomOpen] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -549,27 +550,27 @@ export function ChatInterface() {
 
   return (
     <div className="flex flex-col h-full bg-card rounded-xl border shadow-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b">
+      {/* Header (period filter merged) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="p-2 bg-primary rounded-lg shrink-0">
-            <Bot className="h-5 w-5 text-primary-foreground" />
+          <div className="p-1.5 bg-primary rounded-lg shrink-0">
+            <Bot className="h-4 w-4 text-primary-foreground" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold truncate">FinBot Copilot</h3>
-            <p className="text-xs text-muted-foreground truncate">Seu copiloto financeiro inteligente</p>
+            <h3 className="font-semibold text-sm leading-tight truncate">FinBot Copilot</h3>
+            {activeIntent ? (
+              <p className="text-[11px] text-primary flex items-center gap-1 truncate">
+                <Sparkles className="h-3 w-3 shrink-0" /> Aguardando: {activeIntent.missing_field || activeIntent.intent}
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground truncate hidden sm:block">Seu copiloto financeiro inteligente</p>
+            )}
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={handleClearHistory} title="Limpar histórico">
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Period filter bar */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b bg-muted/30">
-        <span className="text-xs text-muted-foreground font-medium">Analisar:</span>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-xs text-muted-foreground font-medium hidden md:inline">Analisar:</span>
         <Select value={chatPeriod} onValueChange={(v) => handleChatPeriodChange(v as PeriodKey)}>
-          <SelectTrigger className="h-8 w-[180px] text-xs">
+          <SelectTrigger className="h-8 w-[140px] sm:w-[170px] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -600,11 +601,10 @@ export function ChatInterface() {
             </PopoverContent>
           </Popover>
         )}
-        {activeIntent && (
-          <span className="text-[11px] text-primary ml-auto flex items-center gap-1">
-            <Sparkles className="h-3 w-3" /> Aguardando: {activeIntent.missing_field || activeIntent.intent}
-          </span>
-        )}
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setConfirmClearOpen(true)} title="Limpar histórico" aria-label="Limpar histórico" disabled={messages.length === 0 || isStreaming}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -808,6 +808,23 @@ export function ChatInterface() {
         </form>
       </div>
 
+
+      <AlertDialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Limpar histórico da conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todas as mensagens e cartões pendentes deste chat serão removidos. Suas transações não são afetadas. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearHistory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Limpar conversa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Confirmation Dialog for Delete All */}
       <AlertDialog open={!!pendingDeleteAll} onOpenChange={(open) => !open && setPendingDeleteAll(null)}>
