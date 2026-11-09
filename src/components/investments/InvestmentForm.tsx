@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, useMemo, FormEvent } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { INVESTMENT_TYPES } from '@/lib/constants';
 import { useInvestmentsContext } from '@/contexts/InvestmentsContext';
 import { Investment } from '@/types/investment';
+import { cn } from '@/lib/utils';
+import {
+  maskCurrencyInput, formatCurrencyInput, parseCurrencyInput,
+  maskCnpj, isCnpjComplete, buildInstitutionSuggestions,
+} from '@/lib/inputMasks';
 
 interface Props {
   open: boolean;
@@ -14,38 +19,69 @@ interface Props {
   initial?: Investment | null;
 }
 
+function MoneyInput({ id, value, onChange, invalid, describedBy }: {
+  id: string; value: string; onChange: (v: string) => void; invalid?: boolean; describedBy?: string;
+}) {
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+      <Input
+        id={id} type="text" inputMode="decimal" placeholder="0,00"
+        value={value} onChange={(e) => onChange(maskCurrencyInput(e.target.value))}
+        className={cn('pl-10 text-right tabular-nums', invalid && 'border-destructive focus-visible:ring-destructive')}
+        aria-invalid={invalid || undefined} aria-describedby={describedBy}
+      />
+    </div>
+  );
+}
+
 export function InvestmentForm({ open, onOpenChange, initial }: Props) {
-  const { addInvestment, updateInvestment } = useInvestmentsContext();
+  const { addInvestment, updateInvestment, investments } = useInvestmentsContext();
   const [name, setName] = useState(initial?.investment_name ?? '');
   const [type, setType] = useState(initial?.investment_type ?? 'outros');
   const [institution, setInstitution] = useState(initial?.institution ?? '');
-  const [initialAmount, setInitialAmount] = useState(String(initial?.initial_amount ?? ''));
+  const [initialAmount, setInitialAmount] = useState(formatCurrencyInput(initial?.initial_amount != null ? Number(initial.initial_amount) : null));
   const [startDate, setStartDate] = useState(initial?.start_date ?? '');
   const [endDate, setEndDate] = useState(initial?.end_date ?? '');
-  const [averagePrice, setAveragePrice] = useState(initial?.averagePrice != null ? String(initial.averagePrice) : '');
-  const [custodianCnpj, setCustodianCnpj] = useState(initial?.custodianCnpj ?? '');
+  const [averagePrice, setAveragePrice] = useState(formatCurrencyInput(initial?.averagePrice));
+  const [custodianCnpj, setCustodianCnpj] = useState(maskCnpj(initial?.custodianCnpj ?? ''));
   const [showFiscal, setShowFiscal] = useState(Boolean(initial?.averagePrice || initial?.custodianCnpj));
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const parseNum = (v: string) => {
-    const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
-    return Number.isFinite(n) ? n : 0;
-  };
+  const suggestions = useMemo(
+    () => buildInstitutionSuggestions(investments.map(i => i.institution)),
+    [investments],
+  );
+  const filtered = useMemo(() => {
+    const q = institution.trim().toLowerCase();
+    return suggestions.filter(s => !q || (s.toLowerCase().includes(q) && s.toLowerCase() !== q)).slice(0, 8);
+  }, [suggestions, institution]);
+
+  const nameError = !name.trim() ? 'Informe o nome do investimento.' : null;
+  const amountError = parseCurrencyInput(initialAmount) <= 0 ? 'Informe um valor maior que zero.' : null;
+  const cnpjError = !isCnpjComplete(custodianCnpj) ? 'CNPJ incompleto: são 14 dígitos.' : null;
+  const dateError = startDate && endDate && endDate < startDate ? 'O vencimento não pode ser antes do início.' : null;
+  const hasErrors = Boolean(nameError || amountError || cnpjError || dateError);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !initialAmount) return;
+    setTouched(true);
+    if (hasErrors) {
+      if (cnpjError) setShowFiscal(true);
+      return;
+    }
     setSubmitting(true);
-    const amount = parseNum(initialAmount);
-    const avgNum = averagePrice ? parseNum(averagePrice) : NaN;
+    const avgNum = parseCurrencyInput(averagePrice);
     const payload = {
       investment_name: name.trim(),
       investment_type: type,
       institution: institution.trim() || null,
-      initial_amount: amount,
+      initial_amount: parseCurrencyInput(initialAmount),
       start_date: startDate || null,
       end_date: endDate || null,
-      averagePrice: Number.isFinite(avgNum) && avgNum > 0 ? avgNum : undefined,
+      averagePrice: avgNum > 0 ? avgNum : undefined,
       custodianCnpj: custodianCnpj.trim() || undefined,
     };
     let ok = false;
@@ -55,16 +91,25 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
     if (ok) onOpenChange(false);
   };
 
+  const err = (msg: string | null, id: string) =>
+    touched && msg ? <p id={id} role="alert" className="text-xs text-destructive">{msg}</p> : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initial ? 'Editar investimento' : 'Novo investimento'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="iname">Nome do investimento</Label>
-            <Input id="iname" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: CDB Banco XP 110% CDI" required />
+            <Label htmlFor="iname">Nome do investimento *</Label>
+            <Input
+              id="iname" value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: CDB Banco XP 110% CDI"
+              className={cn(touched && nameError && 'border-destructive focus-visible:ring-destructive')}
+              aria-invalid={(touched && !!nameError) || undefined} aria-describedby="iname-err"
+            />
+            {err(nameError, 'iname-err')}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -76,14 +121,35 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="relative space-y-1.5">
               <Label htmlFor="inst">Instituição</Label>
-              <Input id="inst" value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="Ex: XP, Nubank" />
+              <Input
+                id="inst" value={institution} autoComplete="off"
+                onChange={(e) => { setInstitution(e.target.value); setShowSuggestions(true); }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
+                placeholder="Ex: XP, Nubank"
+                role="combobox" aria-expanded={showSuggestions && filtered.length > 0} aria-controls="inst-list"
+              />
+              {showSuggestions && filtered.length > 0 && (
+                <ul id="inst-list" role="listbox" className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md">
+                  {filtered.map(s => (
+                    <li key={s} role="option" aria-selected={false}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); setInstitution(s); setShowSuggestions(false); }}
+                        className="w-full rounded-sm px-2 py-1.5 text-left text-popover-foreground hover:bg-accent/15"
+                      >{s}</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="initial">Valor aplicado *</Label>
-            <Input id="initial" type="text" inputMode="decimal" value={initialAmount} onChange={(e) => setInitialAmount(e.target.value)} placeholder="0,00" required />
+            <MoneyInput id="initial" value={initialAmount} onChange={setInitialAmount} invalid={touched && !!amountError} describedBy="initial-err" />
+            {err(amountError, 'initial-err')}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -92,14 +158,17 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ed">Vencimento</Label>
-              <Input id="ed" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <Input id="ed" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+                className={cn(touched && dateError && 'border-destructive')} aria-describedby="ed-err" />
             </div>
           </div>
+          {err(dateError, 'ed-err')}
 
           <div className="border-t pt-3 space-y-2">
             <button
               type="button"
               onClick={() => setShowFiscal(v => !v)}
+              aria-expanded={showFiscal}
               className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               {showFiscal ? '▾' : '▸'} Dados fiscais (IRPF) — opcional
@@ -107,12 +176,19 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
             {showFiscal && (
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="avgPrice" className="text-xs">Preço médio (R$)</Label>
-                  <Input id="avgPrice" type="text" inputMode="decimal" value={averagePrice} onChange={(e) => setAveragePrice(e.target.value)} placeholder="0,00" />
+                  <Label htmlFor="avgPrice" className="text-xs">Preço médio</Label>
+                  <MoneyInput id="avgPrice" value={averagePrice} onChange={setAveragePrice} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="custodianCnpj" className="text-xs">CNPJ do custodiante</Label>
-                  <Input id="custodianCnpj" type="text" value={custodianCnpj} onChange={(e) => setCustodianCnpj(e.target.value)} placeholder="00.000.000/0000-00" maxLength={20} />
+                  <Input
+                    id="custodianCnpj" type="text" inputMode="numeric" value={custodianCnpj}
+                    onChange={(e) => setCustodianCnpj(maskCnpj(e.target.value))}
+                    placeholder="00.000.000/0000-00" maxLength={18}
+                    className={cn('tabular-nums', touched && cnpjError && 'border-destructive focus-visible:ring-destructive')}
+                    aria-invalid={(touched && !!cnpjError) || undefined} aria-describedby="cnpj-err"
+                  />
+                  {err(cnpjError, 'cnpj-err')}
                 </div>
               </div>
             )}
@@ -120,7 +196,7 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={submitting}>{submitting ? 'Salvando…' : 'Salvar'}</Button>
+            <Button type="submit" disabled={submitting || (touched && hasErrors)}>{submitting ? 'Salvando…' : 'Salvar'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
