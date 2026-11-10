@@ -12,6 +12,8 @@ import {
   maskCurrencyInput, formatCurrencyInput, parseCurrencyInput,
   maskCnpj, isCnpjComplete, buildInstitutionSuggestions,
 } from '@/lib/inputMasks';
+import { INDEXER_OPTIONS, getIndexer, estimateCurrentValue, todayIso, type IndexerKind } from '@/lib/investmentValuation';
+import { formatCurrency } from '@/lib/constants';
 
 interface Props {
   open: boolean;
@@ -36,7 +38,7 @@ function MoneyInput({ id, value, onChange, invalid, describedBy }: {
 }
 
 export function InvestmentForm({ open, onOpenChange, initial }: Props) {
-  const { addInvestment, updateInvestment, investments } = useInvestmentsContext();
+  const { addInvestment, updateInvestment, investments, rates } = useInvestmentsContext();
   const [name, setName] = useState(initial?.investment_name ?? '');
   const [type, setType] = useState(initial?.investment_type ?? 'outros');
   const [institution, setInstitution] = useState(initial?.institution ?? '');
@@ -58,6 +60,16 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
     const q = institution.trim().toLowerCase();
     return suggestions.filter(s => !q || (s.toLowerCase().includes(q) && s.toLowerCase() !== q)).slice(0, 8);
   }, [suggestions, institution]);
+
+  const initialIndexer = getIndexer(initial?.metadata);
+  const [indexer, setIndexer] = useState<IndexerKind>(initialIndexer.kind);
+  const [indexerRate, setIndexerRate] = useState(initialIndexer.kind !== 'none' ? String(initialIndexer.rate).replace('.', ',') : '');
+  const indexerOpt = INDEXER_OPTIONS.find(o => o.value === indexer) ?? INDEXER_OPTIONS[0];
+  const rateNum = Number(indexerRate.replace(',', '.')) || 0;
+  const previewValue = estimateCurrentValue(
+    { initial_amount: parseCurrencyInput(initialAmount), start_date: startDate || null, end_date: endDate || null, metadata: { indexer, indexer_rate: rateNum } },
+    rates, todayIso(),
+  );
 
   const nameError = !name.trim() ? 'Informe o nome do investimento.' : null;
   const amountError = parseCurrencyInput(initialAmount) <= 0 ? 'Informe um valor maior que zero.' : null;
@@ -83,6 +95,7 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
       end_date: endDate || null,
       averagePrice: avgNum > 0 ? avgNum : undefined,
       custodianCnpj: custodianCnpj.trim() || undefined,
+      metadata: { ...(initial?.metadata ?? {}), indexer, indexer_rate: indexer === 'none' ? null : rateNum },
     };
     let ok = false;
     if (initial) ok = await updateInvestment(initial.id, payload);
@@ -163,6 +176,33 @@ export function InvestmentForm({ open, onOpenChange, initial }: Props) {
             </div>
           </div>
           {err(dateError, 'ed-err')}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Indexador</Label>
+              <Select value={indexer} onValueChange={(v) => setIndexer(v as IndexerKind)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INDEXER_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {indexer !== 'none' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="irate">{indexerOpt.rateLabel}</Label>
+                <Input id="irate" type="text" inputMode="decimal" value={indexerRate}
+                  onChange={(e) => setIndexerRate(e.target.value.replace(/[^\d.,]/g, ''))}
+                  placeholder={indexerOpt.placeholder} className="text-right tabular-nums" />
+              </div>
+            )}
+          </div>
+          {indexer !== 'none' && (
+            <p className="text-xs text-muted-foreground">
+              {startDate
+                ? <>Valor estimado hoje: <strong className="text-foreground">{formatCurrency(previewValue)}</strong> · CDI {rates.cdi.toFixed(2)}% · Selic {rates.selic.toFixed(2)}% · IPCA 12m {rates.ipca.toFixed(2)}%</>
+                : 'Informe a data de início para calcular o rendimento.'}
+            </p>
+          )}
 
           <div className="border-t pt-3 space-y-2">
             <button

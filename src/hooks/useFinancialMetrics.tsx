@@ -22,7 +22,7 @@ function toISODate(d: Date | null | undefined): string | null {
  */
 export function useFinancialMetrics() {
   const { filteredTransactions, transactions, filters } = useTransactionsContext();
-  const { investments } = useInvestmentsContext();
+  const { investments, profit } = useInvestmentsContext();
 
   const localMetrics = useMemo(
     () => calculateMetrics(filteredTransactions, investments),
@@ -68,9 +68,21 @@ export function useFinancialMetrics() {
     };
   }, [start, end, dataKey]);
 
+  // Rentabilidade estimada pelos indexadores entra no saldo investido, no patrimônio e no último ponto do gráfico.
+  const withYield = useMemo(() => {
+    const gain = Math.round(profit * 100) / 100;
+    return (m: TransactionMetrics): TransactionMetrics => {
+      if (!gain) return m;
+      const series = m.monthlyNetWorth.slice();
+      const last = series.length - 1;
+      if (last >= 0) series[last] = { ...series[last], invested: series[last].invested + gain, total: series[last].total + gain };
+      return { ...m, investedBalance: m.investedBalance + gain, netWorth: m.netWorth + gain, monthlyNetWorth: series };
+    };
+  }, [profit]);
+
   return {
-    metrics: serverMetrics ?? localMetrics,
-    overallMetrics: serverOverall ?? localOverall,
+    metrics: withYield(serverMetrics ?? localMetrics),
+    overallMetrics: withYield(serverOverall ?? localOverall),
     localMetrics,
     isServerMetrics: serverMetrics !== null,
   };

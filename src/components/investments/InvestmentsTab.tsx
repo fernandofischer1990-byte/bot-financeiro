@@ -39,7 +39,7 @@ export function InvestmentsTab() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <MetricCard title="Saldo Investido" value={totalInvested} icon={Briefcase} variant="investment" />
         <MetricCard title="Total Aportado" value={totalInitial} icon={Coins} variant="default" />
-        <MetricCard title="Rentabilidade" value={profit} icon={profit >= 0 ? TrendingUp : TrendingDown} variant={profit >= 0 ? 'income' : 'expense'} />
+        <MetricCard title="Rentabilidade (est.)" value={profit} icon={profit >= 0 ? TrendingUp : TrendingDown} variant={profit >= 0 ? 'income' : 'expense'} />
         <MetricCard title="Patrimônio Total" value={overallMetrics.netWorth} icon={Coins} variant="networth" />
       </div>
 

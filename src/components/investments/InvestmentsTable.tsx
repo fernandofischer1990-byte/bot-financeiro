@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 export function InvestmentsTable() {
-  const { investments, deleteInvestment } = useInvestmentsContext();
+  const { investments, deleteInvestment, currentValues } = useInvestmentsContext();
   const [editing, setEditing] = useState<Investment | null>(null);
   const [deleting, setDeleting] = useState<Investment | null>(null);
   const [query, setQuery] = useState('');
@@ -57,6 +57,7 @@ export function InvestmentsTable() {
               <TableHead>Tipo</TableHead>
               <TableHead>Instituição</TableHead>
               <TableHead className="text-right">Valor aplicado</TableHead>
+              <TableHead className="text-right">Valor hoje (est.)</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead className="w-[100px]"></TableHead>
             </TableRow>
@@ -72,6 +73,18 @@ export function InvestmentsTable() {
                   <TableCell><Badge variant="outline" className="text-xs">{getInvestmentTypeLabel(inv.investment_type)}</Badge></TableCell>
                   <TableCell className="text-sm">{inv.institution || '—'}</TableCell>
                   <TableCell className="text-right font-semibold">{formatCurrency(Number(inv.initial_amount))}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {(() => {
+                      const cur = currentValues[inv.id] ?? Number(inv.initial_amount);
+                      const diff = cur - Number(inv.initial_amount);
+                      return (
+                        <>
+                          <div className="font-semibold">{formatCurrency(cur)}</div>
+                          {diff !== 0 && <div className={diff > 0 ? 'text-xs text-success' : 'text-xs text-destructive'}>{diff > 0 ? '+' : ''}{formatCurrency(diff)}</div>}
+                        </>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{inv.end_date || '—'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">

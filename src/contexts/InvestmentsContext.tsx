@@ -13,6 +13,7 @@ import { translateError, MESSAGES } from '@/lib/feedback';
 import { logActivity } from '@/services/activityLogService';
 import { trackEvent } from '@/services/analyticsService';
 import { logger } from '@/lib/logger';
+import { estimateCurrentValue, fetchReferenceRates, FALLBACK_RATES, todayIso, type ReferenceRates } from '@/lib/investmentValuation';
 
 function describeInvestment(inv: Investment): string {
   const value = Number(inv.initial_amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -26,6 +27,9 @@ interface InvestmentsContextValue {
   totalInvested: number;
   totalInitial: number;
   profit: number;
+  /** Valor estimado hoje por investimento (id → R$). */
+  currentValues: Record<string, number>;
+  rates: ReferenceRates;
   initialLoading: boolean;
   loadError: string | null;
   refetch: () => Promise<void>;
@@ -49,14 +53,21 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const fetchingRef = useRef(false);
 
+  const [rates, setRates] = useState<ReferenceRates>(FALLBACK_RATES);
+  useEffect(() => { void fetchReferenceRates().then(setRates); }, []);
+
   const totals = useMemo(() => {
+    const today = todayIso();
+    const currentValues: Record<string, number> = {};
     let invested = 0, initial = 0;
     for (const inv of investments) {
-      invested += Number(inv.initial_amount) || 0;
+      const cur = estimateCurrentValue(inv, rates, today);
+      currentValues[inv.id] = cur;
+      invested += cur;
       initial += Number(inv.initial_amount) || 0;
     }
-    return { invested, initial, profit: invested - initial };
-  }, [investments]);
+    return { invested, initial, profit: invested - initial, currentValues };
+  }, [investments, rates]);
 
   const fetchAll = useCallback(async () => {
     if (authLoading) return;
@@ -183,6 +194,8 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
     totalInvested: totals.invested,
     totalInitial: totals.initial,
     profit: totals.profit,
+    currentValues: totals.currentValues,
+    rates,
     initialLoading,
     loadError,
     refetch: fetchAll,
@@ -190,7 +203,7 @@ export function InvestmentsProvider({ children }: { children: ReactNode }) {
     addMultipleInvestments,
     updateInvestment,
     deleteInvestment,
-  }), [investments, totals, initialLoading, loadError, fetchAll, addInvestment, addMultipleInvestments, updateInvestment, deleteInvestment]);
+  }), [investments, totals, rates, initialLoading, loadError, fetchAll, addInvestment, addMultipleInvestments, updateInvestment, deleteInvestment]);
 
   return <InvestmentsContext.Provider value={value}>{children}</InvestmentsContext.Provider>;
 }
